@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+
+# Project specific
+logs/
+output/
+workplan.md
+UPGRADE-DOCU-INT.md
+
+# Test data and output
+test_data/
+test_output/
+test_output_arch/
+test_output_fix/
+metrics_*.json
+
+# AI cache
+.ai_cache/
+
+# Virtual Environment
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.cursorrules
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+
+# Output directory
+parsed_outputs/
+
+# Linters / Formatters Cache
+.ruff_cache/
+
+# Backup files/directories
+backup/ 
