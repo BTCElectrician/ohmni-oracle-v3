@@ -409,3 +409,21 @@ For detailed performance troubleshooting and optimization, see:
 1. **Extraction slow?** Set `ENABLE_TABLE_EXTRACTION=false` in `.env`
 2. **Processing slow?** Set `ENABLE_AI_CACHE=true` in `.env`
 3. **First run always slow?** This is normal - subsequent runs will be 20-30x faster
+
+## Contributing
+
+This project is currently private and not accepting contributions. All rights reserved.
+
+## 👨‍💻 Developer
+
+**Collin** - Construction Technology Developer
+
+Building AI-powered solutions for the construction industry. This project represents months of development work in document processing, AI integration, and construction workflow automation.
+
+**Connect:**
+- GitHub: [@BTCElectrician](https://github.com/BTCElectrician)
+- Email: Velardecollin@gmail.com
+
+---
+
+**© 2024 All Rights Reserved** - This software and its documentation are proprietary and confidential. Unauthorized copying, distribution, or use is strictly prohibited.
