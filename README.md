@@ -1,5 +1,11 @@
 # Ohmni Oracle Template - Construction Drawing Processor
 
+<div align="center">
+  <img src="assets/github-owl.png" alt="Ohmni Oracle Logo" width="400" height="200">
+  <br>
+  <em>AI-Powered Construction Drawing Processing & Analysis</em>
+</div>
+
 ## Overview
 
 The Ohmni Oracle Template is a sophisticated Python-based backend system designed to process PDF construction drawings. It leverages Artificial Intelligence (specifically OpenAI's GPT models) to extract, structure, and normalize information from various types of construction documents, including architectural, electrical, mechanical, and plumbing drawings. The system is built for asynchronous, batch processing and includes features for performance monitoring, AI response caching, and robust error handling.
@@ -7,6 +13,8 @@ The Ohmni Oracle Template is a sophisticated Python-based backend system designe
 The primary goal is to convert unstructured data from PDF drawings into structured JSON output, making it usable for downstream analysis, data integration, or other construction technology applications.
 
 ## Features
+
+> **💡 Performance Tip**: For optimal performance, ensure `ENABLE_TABLE_EXTRACTION=false` and `ENABLE_AI_CACHE=true` in your `.env` file. See [Performance Configuration](#-performance-configuration) below for details.
 
 ### Core Processing
 *   **Asynchronous PDF Processing:** Efficiently handles multiple PDF files concurrently using Python's `asyncio`.
@@ -64,6 +72,10 @@ The primary goal is to convert unstructured data from PDF drawings into structur
 /
 ├── config/                 # Application settings and configuration loading
 │   ├── settings.py         # Defines and loads all environment variables
+├── docs/                   # Documentation and guides
+│   ├── PERFORMANCE.md      # Performance analysis and optimization
+│   ├── TROUBLESHOOTING.md  # Common issues and solutions
+│   └── *.md               # Other technical documentation
 ├── processing/             # Core processing logic
 │   ├── file_processor.py   # Logic for processing a single PDF file
 │   └── job_processor.py    # Orchestrates processing of a whole job/folder
@@ -143,26 +155,53 @@ The primary goal is to convert unstructured data from PDF drawings into structur
         OPENAI_API_KEY=your_openai_api_key_here
         # Other settings as needed, see .env.example for all options
         ```
+    *   **⚠️ CRITICAL**: Ensure these performance settings are configured:
+        ```dotenv
+        ENABLE_TABLE_EXTRACTION=false  # Prevents 27x extraction slowdown
+        ENABLE_AI_CACHE=true           # Enables 28-38x performance improvement
+        AI_CACHE_TTL_HOURS=24         # Cache time-to-live
+        ```
 
 ## Configuration
 
 The application is configured primarily through environment variables defined in the `.env` file and loaded by `config/settings.py`.
+
+## ⚡ Performance Configuration
+
+### Critical Settings (MUST HAVE in .env)
+```bash
+# REQUIRED - Prevents 27x slowdown in extraction
+ENABLE_TABLE_EXTRACTION=false  
+
+# REQUIRED - Enables caching (28-38x performance difference)
+ENABLE_AI_CACHE=true
+AI_CACHE_TTL_HOURS=24
+
+# OPTIONAL - Trade speed for potential accuracy
+FORCE_MINI_MODEL=false  # true = 29% faster uncached processing
+```
+
+### Expected Performance
+- **First run (uncached)**: ~3-4 minutes for 9 PDFs
+- **Cached runs**: ~11 seconds for 9 PDFs
+- **Extraction**: <1 second per PDF (if slow, check ENABLE_TABLE_EXTRACTION)
 
 ### Key Environment Variables:
 
 *   `OPENAI_API_KEY` (Required): Your API key for OpenAI.
 *   `LOG_LEVEL`: Logging level (e.g., `INFO`, `DEBUG`, `WARNING`). Defaults to `INFO`.
 *   `BATCH_SIZE`: Number of PDF files to process concurrently by workers. Defaults to `10`.
-*   `MAX_CONCURRENT_API_CALLS`: Maximum number of concurrent calls to the OpenAI API, controlled by a semaphore. Defaults to `20`.
+*   `MAX_CONCURRENT_API_CALLS`: Maximum number of concurrent calls to the OpenAI API, controlled by a semaphore at the API call site. Defaults to `20`.
 *   `API_RATE_LIMIT`: (Currently informational) Intended API calls per minute. Defaults to `60`.
 *   `TIME_WINDOW`: (Currently informational) Time window in seconds for the rate limit. Defaults to `60`.
 *   `MODEL_UPGRADE_THRESHOLD`: Character count threshold in extracted text above which a more powerful model (GPT-4o) is used instead of the mini model. Defaults to `15000`.
 *   `FORCE_MINI_MODEL`: Set to `true` to always use the mini model (GPT-4o-mini), overriding other model selection logic. This setting is reloaded dynamically during runtime. Defaults to `false`.
 *   `USE_4O_FOR_SCHEDULES`: Set to `true` to use GPT-4o for schedule drawings (panel, mechanical, etc.) regardless of size (unless `FORCE_MINI_MODEL` is true). Defaults to `true`.
-*   `ENABLE_AI_CACHE`: Set to `true` to enable caching of AI responses. Defaults to `false`.
+*   `ENABLE_AI_CACHE`: Set to `true` to enable caching of AI responses. Defaults to `false`. **⚠️ CRITICAL: Without this, processing takes 20-30x longer.**
 *   `AI_CACHE_DIR`: Directory to store AI cache files. Defaults to `.ai_cache`.
 *   `AI_CACHE_TTL_HOURS`: Time-to-live for cache files in hours. Defaults to `24`.
 *   `USE_SIMPLIFIED_PROCESSING`: **Deprecated.** This flag is no longer actively used to change processing logic. If set, a warning will be logged.
+*   `ENABLE_TABLE_EXTRACTION`: Enable PyMuPDF table detection in extraction. Defaults to `false` for performance. Set to `true` if you need table detection (slower). **⚠️ CRITICAL: Setting this to `true` causes 27x slowdown in extraction.**
 *   `DEBUG_MODE`: Set to `true` for additional debug information. Defaults to `false`.
 
 **Note:** Rate limiting is handled by the semaphore `MAX_CONCURRENT_API_CALLS`. The `API_RATE_LIMIT` and `TIME_WINDOW` values are currently informational placeholders.
@@ -294,6 +333,64 @@ All output files are saved in the specified `output_folder`.
 *   **Environment-Driven Configuration:** Centralizing configuration in `.env` files and `config/settings.py` makes the application adaptable to different environments and setups without code changes.
 *   **Detailed Performance Tracking:** The `utils/performance_utils.py` module provides deep insights into the performance of different stages of the pipeline, which is crucial for optimization and identifying bottlenecks.
 
+## Specialized Prompts vs. General Prompt (Performance Trade-off)
+
+We maintain discipline- and subtype-specific prompts under `templates/prompts/*.py` (Architectural, Electrical, Mechanical, Plumbing). Through testing, specialized prompts increased token usage and slowed uncached runs with little accuracy benefit on most drawings.
+
+Therefore, at runtime we default to a single comprehensive "GENERAL" prompt for all drawings:
+- **Faster cold runs** (fewer prompt tokens)
+- **Simpler to maintain**
+- **Works well with modern models** (JSON mode + robust extraction/normalization)
+
+**What's enabled today:**
+- `PromptRegistry.get(...)` always returns the GENERAL prompt
+- Specialized prompts are present in code but are not used at runtime by default
+
+**When to consider specialized prompts:**
+- Debugging very tricky sheets where the GENERAL prompt underperforms
+- Targeted use in a failure-retry path (e.g., only if JSON parsing fails)
+- Small documents where prompt token overhead is negligible
+
+**How to enable (optional):**
+
+1. Ensure prompt modules are imported so their decorators register prompts:
+```python
+# templates/prompts/__init__.py
+from .architectural import *  # noqa
+from .electrical import *     # noqa
+from .mechanical import *     # noqa
+from .plumbing import *       # noqa
+from .metadata import *       # noqa
+```
+
+2. Add an environment flag:
+```dotenv
+# .env
+USE_SPECIALIZED_PROMPTS=false     # default and recommended
+# Optional retry strategy: only use specialized prompts on parse failure (not enabled by default)
+RETRY_WITH_SPECIALIZED_PROMPTS=false
+```
+
+3. Update the registry to honor the flag:
+```python
+# templates/prompt_registry.py
+import os
+# ... keep the rest of the file as-is ...
+
+def get(self, drawing_type: str, subtype: Optional[str] = None) -> str:
+    use_specialized = os.getenv("USE_SPECIALIZED_PROMPTS", "false").lower() == "true"
+    if use_specialized:
+        key = f"{drawing_type}_{subtype}".upper() if subtype else (drawing_type or "").upper()
+        if key in self._prompts:
+            return self._prompts[key]
+        if drawing_type and drawing_type.upper() in self._prompts:
+            return self._prompts[drawing_type.upper()]
+    # Fallback (and default): single comprehensive prompt
+    return self._prompts.get("GENERAL", "")
+```
+
+**Note:** Enabling specialized prompts increases token usage and cost; the runtime penalty is largely mitigated on subsequent runs if `ENABLE_AI_CACHE=true`.
+
 ## Troubleshooting
 
 *   **Check Log Files:** The primary source of information for diagnosing issues is the log files located in `<output_folder>/logs/`. Set `LOG_LEVEL=DEBUG` in your `.env` file for more verbose logging.
@@ -301,3 +398,14 @@ All output files are saved in the specified `output_folder`.
 *   **OpenAI API Key:** Ensure your `OPENAI_API_KEY` is correctly set in the `.env` file and has sufficient quota.
 *   **File Permissions:** Verify that the application has read permissions for the input folder and write permissions for the output folder.
 *   **Dependencies:** Ensure all dependencies in `requirements.txt` are correctly installed in your virtual environment.
+
+### Performance Issues
+
+For detailed performance troubleshooting and optimization, see:
+*   **[Performance Documentation](docs/PERFORMANCE.md)** - Comprehensive performance analysis, baselines, and optimization strategies
+*   **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** - Common issues and their solutions
+
+**Quick Performance Fixes:**
+1. **Extraction slow?** Set `ENABLE_TABLE_EXTRACTION=false` in `.env`
+2. **Processing slow?** Set `ENABLE_AI_CACHE=true` in `.env`
+3. **First run always slow?** This is normal - subsequent runs will be 20-30x faster
