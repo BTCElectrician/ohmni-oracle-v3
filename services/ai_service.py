@@ -6,6 +6,7 @@ import json
 import logging
 import time
 import os
+import asyncio
 from typing import Dict, Any, Optional, TypeVar, Generic, List
 from openai import AsyncOpenAI
 from tenacity import (
@@ -26,13 +27,26 @@ from config.settings import (
     DEFAULT_MODEL_TEMP, DEFAULT_MODEL_MAX_TOKENS,
     LARGE_MODEL_TEMP, LARGE_MODEL_MAX_TOKENS,
     TINY_MODEL_TEMP, TINY_MODEL_MAX_TOKENS,
-    ACTUAL_MODEL_MAX_COMPLETION_TOKENS
+    ACTUAL_MODEL_MAX_COMPLETION_TOKENS,
+    MAX_CONCURRENT_API_CALLS,
 )
 from utils.exceptions import AIProcessingError, JSONValidationError
 from utils.ai_cache import load_cache, save_cache
 
 # Initialize logger at module level
 logger = logging.getLogger(__name__)
+
+
+# Global API semaphore for rate limiting
+_api_semaphore: Optional[asyncio.Semaphore] = None
+
+def get_api_semaphore() -> asyncio.Semaphore:
+    """Get or create the global API semaphore."""
+    global _api_semaphore
+    if _api_semaphore is None:
+        _api_semaphore = asyncio.Semaphore(MAX_CONCURRENT_API_CALLS or 20)
+        logger.info(f"API semaphore created with limit={MAX_CONCURRENT_API_CALLS}")
+    return _api_semaphore
 
 
 def optimize_model_parameters(
@@ -176,13 +190,14 @@ async def make_openai_request(
     """
     start_time = time.time()
     try:
-        response = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format=response_format,
-        )
+        async with get_api_semaphore():
+            response = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format=response_format,
+            )
         request_time = time.time() - start_time
 
         # Get the global tracker and add metrics

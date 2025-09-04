@@ -169,6 +169,8 @@ class PyMuPdfExtractor(PdfExtractor):
                     self.logger.info(f"Extracted {len(titleblock_text)} chars from title block")
 
             # Process each page individually to avoid reference issues
+            enable_table_extraction = os.getenv("ENABLE_TABLE_EXTRACTION", "true").lower() == "true"
+            table_notice_logged = False
             for i, page in enumerate(doc):
                 # Add page header
                 page_text = f"PAGE {i+1}:\n"
@@ -195,33 +197,38 @@ class PyMuPdfExtractor(PdfExtractor):
                 # Add to overall text
                 raw_text += page_text
 
-                # Extract tables safely
-                try:
-                    # Only attempt table extraction if page has text
-                    page_text = page.get_text("text")
-                    if page_text and page_text.strip():
-                        try:
-                            table_finder = page.find_tables()
-                            if table_finder and hasattr(table_finder, "tables"):
-                                for j, table in enumerate(table_finder.tables or []):
-                                    try:
-                                        if hasattr(table, 'to_markdown'):
-                                            table_markdown = table.to_markdown()
-                                            if table_markdown:
-                                                tables.append({
-                                                    "page": i + 1,
-                                                    "table_index": j,
-                                                    "content": table_markdown,
-                                                })
-                                    except Exception as e:
-                                        # Skip individual table errors
-                                        self.logger.debug(f"Skipping table {j} on page {i+1}: {str(e)}")
-                        except AttributeError:
-                            # Page doesn't support tables - this is normal
-                            self.logger.debug(f"Page {i+1} doesn't support table extraction")
-                except Exception as e:
-                    # Log at debug level since this isn't critical
-                    self.logger.debug(f"Table extraction skipped for page {i+1}: {str(e)}")
+                # Extract tables safely (ONLY if enabled)
+                if enable_table_extraction:
+                    try:
+                        # Only attempt table extraction if page has text
+                        page_text = page.get_text("text")
+                        if page_text and page_text.strip():
+                            try:
+                                table_finder = page.find_tables()
+                                if table_finder and hasattr(table_finder, "tables"):
+                                    for j, table in enumerate(table_finder.tables or []):
+                                        try:
+                                            if hasattr(table, 'to_markdown'):
+                                                table_markdown = table.to_markdown()
+                                                if table_markdown:
+                                                    tables.append({
+                                                        "page": i + 1,
+                                                        "table_index": j,
+                                                        "content": table_markdown,
+                                                    })
+                                        except Exception as e:
+                                            # Skip individual table errors
+                                            self.logger.debug(f"Skipping table {j} on page {i+1}: {str(e)}")
+                            except AttributeError:
+                                # Page doesn't support tables - this is normal
+                                self.logger.debug(f"Page {i+1} doesn't support table extraction")
+                    except Exception as e:
+                        # Log at debug level since this isn't critical
+                        self.logger.debug(f"Table extraction skipped for page {i+1}: {str(e)}")
+                else:
+                    if not table_notice_logged:
+                        self.logger.info("ENABLE_TABLE_EXTRACTION=false; skipping PyMuPDF table detection for speed")
+                        table_notice_logged = True
 
             return raw_text, tables, metadata, titleblock_text
 

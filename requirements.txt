@@ -23,7 +23,7 @@ openai~=1.66.3  # For Responses API support
 tiktoken~=0.9.0
 
 # PDF processing
-PyMuPDF~=1.24.11  # For enhanced text extraction formats and DataFrame support
+PyMuPDF~=1.26.4  # For enhanced text extraction formats and DataFrame support
 pypdfium2~=4.30.0
 Wand~=0.6.13
 pandas>=2.0.0  # For PyMuPDF's Table.to_pandas() functionality
