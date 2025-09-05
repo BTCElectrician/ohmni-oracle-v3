@@ -38,6 +38,14 @@ from utils.ai_cache import load_cache, save_cache
 # Initialize logger at module level
 logger = logging.getLogger(__name__)
 
+def _uses_max_completion_tokens(model: str) -> bool:
+    """
+    Newer Chat Completions models (gpt-4.1*, gpt-4o*, gpt-5*) require 'max_completion_tokens'
+    instead of 'max_tokens'.
+    """
+    m = (model or "").lower()
+    return any(k in m for k in ["gpt-4.1", "gpt-4o", "gpt-5"])
+
 # ============== DUAL MODEL CONFIGURATION ==============
 # Supports both GPT-4.x (with response_format) and GPT-5 (without response_format)
 USE_GPT5_API = os.getenv("USE_GPT5_API", "false").lower() == "true"
@@ -385,11 +393,12 @@ async def make_openai_request(
     start_time = time.time()
     try:
         # Build base parameters - these work for ALL models
+        token_param = "max_completion_tokens" if _uses_max_completion_tokens(model) else "max_tokens"
         params = {
             "model": model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": max_tokens,
+            token_param: max_tokens,
             "response_format": response_format,
         }
         
