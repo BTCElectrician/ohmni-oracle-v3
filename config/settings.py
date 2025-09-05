@@ -107,6 +107,13 @@ def get_all_settings() -> Dict[str, Any]:
         "TINY_MODEL_TEMP": TINY_MODEL_TEMP,
         "TINY_MODEL_MAX_TOKENS": TINY_MODEL_MAX_TOKENS,
         "ACTUAL_MODEL_MAX_COMPLETION_TOKENS": ACTUAL_MODEL_MAX_COMPLETION_TOKENS,
+        # Visibility for GPT-5 routing and stability toggles
+        "USE_GPT5_API": os.getenv("USE_GPT5_API", "false"),
+        "GPT5_FOR_LARGE_ONLY": os.getenv("GPT5_FOR_LARGE_ONLY", "true"),
+        "GPT5_MIN_LENGTH_FOR_RESPONSES": os.getenv("GPT5_MIN_LENGTH_FOR_RESPONSES", str(MINI_CHAR_THRESHOLD)),
+        "RESPONSES_TIMEOUT_SECONDS": os.getenv("RESPONSES_TIMEOUT_SECONDS", "45"),
+        "GPT5_FAILURE_THRESHOLD": os.getenv("GPT5_FAILURE_THRESHOLD", "2"),
+        "GPT5_DISABLE_ON_EMPTY_OUTPUT": os.getenv("GPT5_DISABLE_ON_EMPTY_OUTPUT", "true"),
     }
 
 # Reduce logging noise from verbose modules

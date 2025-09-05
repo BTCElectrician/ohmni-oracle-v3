@@ -17,26 +17,21 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 def _generate_cache_key(prompt: str, params: Dict[str, Any]) -> str:
     """
     Generate a unique cache key based on prompt and parameters.
-
-    Args:
-        prompt: The content prompt
-        params: Model parameters (temperature, model, etc.)
-
-    Returns:
-        A unique hash string to use as cache key
+    Includes API type and an instructions hash to avoid cross-API collisions.
     """
-    # Include key parameters in the hash to ensure cache validity
+    instr = (params.get("instructions") or "").strip()
+    instructions_hash = hashlib.sha256(instr.encode()).hexdigest() if instr else ""
+
     key_data = {
         "prompt": prompt,
         "model": params.get("model", ""),
         "temperature": params.get("temperature", 0.0),
         "max_tokens": params.get("max_tokens", 0),
+        "api_type": params.get("api_type", "chat"),
+        "instructions_hash": instructions_hash,
     }
-
-    # Create a stable string representation and hash it
     key_str = json.dumps(key_data, sort_keys=True)
-    h = hashlib.sha256(key_str.encode()).hexdigest()
-    return h
+    return hashlib.sha256(key_str.encode()).hexdigest()
 
 
 def _get_cache_path(cache_key: str) -> str:
@@ -112,7 +107,7 @@ def save_cache(prompt: str, params: Dict[str, Any], response: str) -> None:
             "prompt": prompt,
             "params": {
                 k: params[k]
-                for k in ["model", "temperature", "max_tokens"]
+                for k in ["model", "temperature", "max_tokens", "api_type"]
                 if k in params
             },
             "response": response,
