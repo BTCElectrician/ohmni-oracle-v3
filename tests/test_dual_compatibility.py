@@ -60,32 +60,28 @@ async def test_gpt5_excludes_response_format():
     assert "response_format" not in call_args
 
 
-@pytest.mark.asyncio
-async def test_gpt5_includes_text_verbosity():
-    """Test that GPT-5 models include text.verbosity when env var is set."""
-    with patch.dict(os.environ, {"GPT5_TEXT_VERBOSITY": "low"}):
-        client = Mock()
-        client.responses = Mock()
-        client.responses.create = AsyncMock()
-        
-        # Mock response
-        mock_response = Mock()
-        mock_response.output_text = '{"test": "data"}'
-        client.responses.create.return_value = mock_response
-        
-        # Test with GPT-5-mini
-        await make_responses_api_request(
-            client=client,
-            input_text="test input",
-            model="gpt-5-mini",
-            temperature=0.5,
-            max_tokens=100
-        )
-        
-        # Verify text.verbosity was included
-        call_args = client.responses.create.call_args[1]
-        assert "text" in call_args
-        assert call_args["text"]["verbosity"] == "low"
+def test_validate_reasoning_effort():
+    """Test the reasoning effort validation function."""
+    from services.ai_service import _validate_reasoning_effort
+    
+    # Test valid values
+    with patch.dict(os.environ, {"GPT5_REASONING_EFFORT": "minimal"}):
+        assert _validate_reasoning_effort() == "minimal"
+    
+    with patch.dict(os.environ, {"GPT5_REASONING_EFFORT": "HIGH"}):
+        assert _validate_reasoning_effort() == "high"  # Should be lowercased
+    
+    # Test invalid value (should default to minimal)
+    with patch.dict(os.environ, {"GPT5_REASONING_EFFORT": "invalid"}):
+        assert _validate_reasoning_effort() == "minimal"
+    
+    # Test with inline comment
+    with patch.dict(os.environ, {"GPT5_REASONING_EFFORT": "medium # this is a comment"}):
+        assert _validate_reasoning_effort() == "medium"
+    
+    # Test default when not set
+    with patch.dict(os.environ, {}, clear=True):
+        assert _validate_reasoning_effort() == "minimal"
 
 
 @pytest.mark.asyncio

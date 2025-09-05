@@ -79,26 +79,26 @@ _registry.register(
     
     1. A top-level "DRAWING_METADATA" object containing:
        - drawing_number: The drawing identifier
-       - title: Drawing title/description
-       - date: Drawing date if available
-       - revision: Revision information if present
-       - project_name: Full project name
-       - Other metadata fields as available
+        - title: Drawing title/description
+        - date: Drawing date if available
+        - revision: Revision information if present
+        - project_name: Full project name
+        - Other metadata fields as available
     
     2. A main category section based on drawing type:
-       - For ARCHITECTURAL drawings: Use "ARCHITECTURAL" as the main key
-       - For ELECTRICAL drawings: Use "ELECTRICAL" as the main key
-       - For MECHANICAL drawings: Use "MECHANICAL" as the main key
-       - For PLUMBING drawings: Use "PLUMBING" as the main key
-       - For other drawings: Use an appropriate main category key
+        - For ARCHITECTURAL drawings: Use "ARCHITECTURAL" as the main key
+        - For ELECTRICAL drawings: Use "ELECTRICAL" as the main key
+        - For MECHANICAL drawings: Use "MECHANICAL" as the main key
+        - For PLUMBING drawings: Use "PLUMBING" as the main key
+        - For other drawings: Use an appropriate main category key
     
     3. Under the main category, capture ALL content using these guidelines:
-       - For schedules and tabular data: Preserve ALL rows, columns, and values exactly as shown. 
-         Include every cell, measurement, specification, and notation. Do not skip any entries.
-       - For specifications and text sections: Capture EVERY section, subsection, paragraph and note.
-         Preserve the exact wording, numbering, and hierarchy of the content.
-       - For drawings with multiple data types: Organize data into logical sections like 
-         "SCHEDULES", "NOTES", "SPECIFICATIONS", etc.
+        - For schedules and tabular data: Preserve ALL rows, columns, and values exactly as shown. 
+          Include every cell, measurement, specification, and notation. Do not skip any entries.
+        - For specifications and text sections: Capture EVERY section, subsection, paragraph and note.
+          Preserve the exact wording, numbering, and hierarchy of the content.
+        - For drawings with multiple data types: Organize data into logical sections like 
+          "SCHEDULES", "NOTES", "SPECIFICATIONS", etc.
     
     CRITICAL ROOM STRUCTURE FOR ARCHITECTURAL DRAWINGS:
     For FLOOR PLANS, you MUST organize room information like this:
