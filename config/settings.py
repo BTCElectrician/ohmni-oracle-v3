@@ -51,6 +51,10 @@ SCHEDULE_MODEL = os.getenv("SCHEDULE_MODEL", "gpt-4o")
 TINY_MODEL = os.getenv("TINY_MODEL", "")  # Optional tiny model
 TINY_MODEL_THRESHOLD = int(os.getenv("TINY_MODEL_THRESHOLD", "3000"))
 
+# Model Size Thresholds for tiered selection
+NANO_CHAR_THRESHOLD = int(os.getenv("NANO_CHAR_THRESHOLD", "3000"))
+MINI_CHAR_THRESHOLD = int(os.getenv("MINI_CHAR_THRESHOLD", "15000"))
+
 # Model-specific parameters (future-proof - no hardcoded model name checks)
 DEFAULT_MODEL_TEMP = float(os.getenv("DEFAULT_MODEL_TEMP", "0.1"))
 DEFAULT_MODEL_MAX_TOKENS = int(os.getenv("DEFAULT_MODEL_MAX_TOKENS", "16000"))
@@ -94,6 +98,8 @@ def get_all_settings() -> Dict[str, Any]:
         "SCHEDULE_MODEL": SCHEDULE_MODEL,
         "TINY_MODEL": TINY_MODEL,
         "TINY_MODEL_THRESHOLD": TINY_MODEL_THRESHOLD,
+        "NANO_CHAR_THRESHOLD": NANO_CHAR_THRESHOLD,
+        "MINI_CHAR_THRESHOLD": MINI_CHAR_THRESHOLD,
         "DEFAULT_MODEL_TEMP": DEFAULT_MODEL_TEMP,
         "DEFAULT_MODEL_MAX_TOKENS": DEFAULT_MODEL_MAX_TOKENS,
         "LARGE_MODEL_TEMP": LARGE_MODEL_TEMP,
