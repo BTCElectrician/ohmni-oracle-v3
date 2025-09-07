@@ -745,6 +745,12 @@ async def repair_metadata(
     Repair metadata by extracting it from title block text using AI.
     Also updated to support GPT-5 when enabled.
     """
+    # ADD THIS HARD GATE AT THE VERY BEGINNING
+    from config.settings import get_enable_metadata_repair
+    if not get_enable_metadata_repair():
+        logger.info("Metadata repair disabled by ENABLE_METADATA_REPAIR=false")
+        return {}
+    
     if not titleblock_text:
         logger.warning("No title block text provided for metadata repair")
         return {}
