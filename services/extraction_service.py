@@ -376,7 +376,6 @@ class ArchitecturalExtractor(PyMuPdfExtractor):
     def __init__(self, logger: Optional[logging.Logger] = None):
         super().__init__(logger)
 
-    @time_operation("extraction")
     async def extract(self, file_path: str) -> ExtractionResult:
         """Extract architectural-specific content from PDF."""
         # Get base extraction using parent method
@@ -465,7 +464,6 @@ class ElectricalExtractor(PyMuPdfExtractor):
         else:
             return "general"
 
-    @time_operation("extraction")
     async def extract(self, file_path: str) -> ExtractionResult:
         """Extract electrical-specific content from PDF."""
         # Get base extraction using parent method
@@ -639,7 +637,6 @@ class MechanicalExtractor(PyMuPdfExtractor):
     def __init__(self, logger: Optional[logging.Logger] = None):
         super().__init__(logger)
 
-    @time_operation("extraction")
     async def extract(self, file_path: str) -> ExtractionResult:
         """Extract mechanical-specific content from PDF."""
         # Use parent extraction method
@@ -709,7 +706,6 @@ class PlumbingExtractor(PyMuPdfExtractor):
     def __init__(self, logger: Optional[logging.Logger] = None):
         super().__init__(logger)
 
-    @time_operation("extraction")
     async def extract(self, file_path: str) -> ExtractionResult:
         # Base extraction using parent method
         result = await super().extract(file_path)

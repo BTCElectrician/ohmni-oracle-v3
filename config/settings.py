@@ -44,6 +44,20 @@ def get_force_mini_model():
 # Standard definition for backward compatibility
 FORCE_MINI_MODEL = get_force_mini_model()
 
+# Metadata repair toggle (dynamic)
+def get_enable_metadata_repair() -> bool:
+    """Return whether metadata repair is enabled. Prefer OS env over .env.
+
+    Reload .env without overriding existing environment variables so that
+    runtime-exported values take precedence.
+    """
+    # Do not override existing environment variables (OS env wins)
+    load_dotenv(override=False)
+    raw = os.getenv("ENABLE_METADATA_REPAIR", "true") or "true"
+    # Allow inline comments and whitespace in .env values
+    cleaned = raw.split("#", 1)[0].strip().lower()
+    return cleaned == "true"
+
 # Model Configuration - Easy to change when new models come out
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
 LARGE_DOC_MODEL = os.getenv("LARGE_DOC_MODEL", "gpt-4o")
@@ -90,6 +104,7 @@ def get_all_settings() -> Dict[str, Any]:
         "DEBUG_MODE": DEBUG_MODE,
         "USE_SIMPLIFIED_PROCESSING": USE_SIMPLIFIED_PROCESSING,
         "FORCE_MINI_MODEL": get_force_mini_model(),  # Always get latest value
+        "ENABLE_METADATA_REPAIR": get_enable_metadata_repair(),
         "MAX_CONCURRENT_API_CALLS": MAX_CONCURRENT_API_CALLS,
         "MODEL_UPGRADE_THRESHOLD": MODEL_UPGRADE_THRESHOLD,
         "USE_4O_FOR_SCHEDULES": USE_4O_FOR_SCHEDULES,

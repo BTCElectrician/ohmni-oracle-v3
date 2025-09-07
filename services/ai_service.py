@@ -8,6 +8,7 @@ import time
 import os
 import re
 import asyncio
+import uuid
 from typing import Dict, Any, Optional, TypeVar, Generic, List
 from openai import AsyncOpenAI
 from tenacity import (
@@ -33,6 +34,7 @@ from config.settings import (
     MINI_CHAR_THRESHOLD   # NEW
 )
 from utils.exceptions import AIProcessingError, JSONValidationError
+from config.settings import get_enable_metadata_repair
 from utils.ai_cache import load_cache, save_cache
 
 # Initialize logger at module level
@@ -64,6 +66,8 @@ GPT5_MODEL_MAP = {
 RESPONSES_TIMEOUT_SECONDS = int(os.getenv("RESPONSES_TIMEOUT_SECONDS", "45"))
 ENABLE_GPT5_NANO = os.getenv("ENABLE_GPT5_NANO", "false").lower() == "true"
 SCHEDULES_ENABLED = os.getenv("SCHEDULES_ENABLED", "false").lower() == "true"
+# Deprecated: do not read at import time; use dynamic getter instead
+# ENABLE_METADATA_REPAIR = os.getenv("ENABLE_METADATA_REPAIR", "true").lower() == "true"
 
 # NEW: Routing and stability toggles
 GPT5_FOR_LARGE_ONLY = os.getenv("GPT5_FOR_LARGE_ONLY", "true").lower() == "true"
@@ -158,27 +162,18 @@ def optimize_model_parameters(
     if not DEFAULT_MODEL:
         raise ValueError("DEFAULT_MODEL not configured in settings")
 
-    # Detect if this is a schedule (schedules need maximum accuracy)
-    is_schedule = (
-        "panel" in drawing_type.lower()
-        or "schedule" in drawing_type.lower()
-        or ("mechanical" in drawing_type.lower() and "schedule" in pdf_path.lower())
-        or ("plumbing" in drawing_type.lower() and "schedule" in pdf_path.lower())
-        or ("electrical" in drawing_type.lower() and "schedule" in pdf_path.lower())
-        or ("electrical" in drawing_type.lower() and "panel" in pdf_path.lower())
-        or ("architectural" in drawing_type.lower() and "schedule" in pdf_path.lower())
-        or ("firealarm" in drawing_type.lower() and "schedule" in pdf_path.lower())
-    )
+    # Detect if this is a schedule OR a specification (treat specs like schedules)
+    is_schedule = _is_schedule_or_spec(drawing_type, pdf_path)
 
     # Get force mini override status
     force_mini = get_force_mini_model()
 
-    # PRIORITY 1: Schedules ALWAYS use full model regardless of size or overrides
+    # PRIORITY 1: Schedules/specs ALWAYS use schedule model regardless of size or overrides
     if is_schedule:
         model = SCHEDULE_MODEL  # Will map to gpt-5 when USE_GPT5_API=true
         temperature = LARGE_MODEL_TEMP
         max_tokens = LARGE_MODEL_MAX_TOKENS
-        logger.info(f"Using full model for schedule document ({content_length} chars)")
+        logger.info(f"Using schedule model for schedule/spec document ({content_length} chars)")
     
     # PRIORITY 2: Force mini override for non-schedules (emergency cost control)
     elif force_mini:
@@ -291,6 +286,11 @@ async def make_responses_api_request(
             client.responses.create(**params),
             timeout=RESPONSES_TIMEOUT_SECONDS
         )
+
+        # Log token usage
+        usage = getattr(response, "usage", None)
+        if usage:
+            logger.info(f"Token usage - Input: {getattr(usage, 'prompt_tokens', 'N/A')}, Output: {getattr(usage, 'completion_tokens', 'N/A')}")
 
         output = (getattr(response, "output_text", "") or "").strip()
         if not output:
@@ -408,8 +408,28 @@ async def make_openai_request(
             params["reasoning"] = {"effort": reasoning_effort}
             logger.debug(f"Added reasoning.effort={reasoning_effort} for {model}")
         
+        # Add this right before response = await client.chat.completions.create(**params)
+        try:
+            logger.info(
+                "OpenAI Chat API request starting",
+                extra={"model": model, "file": os.path.basename(file_path) if file_path else "unknown",
+                       "type": drawing_type or "unknown", "tokens": max_tokens}
+            )
+        except Exception:
+            pass
+        
         # Make the API call with properly filtered parameters
         response = await client.chat.completions.create(**params)
+        
+        # Add this right after response = await client.chat.completions.create(**params)
+        request_id = getattr(response, "id", "unknown")
+        system_fingerprint = getattr(response, "system_fingerprint", None)
+        
+        # Log token usage
+        usage = response.usage
+        if usage:
+            logger.info(f"Token usage - Input: {usage.prompt_tokens}, Output: {usage.completion_tokens}")
+        
         request_time = time.time() - start_time
 
         tracker = get_tracker()
@@ -420,7 +440,9 @@ async def make_openai_request(
             file_path=file_path,
             drawing_type=drawing_type,
             model=model,
-            api_type="chat_completions"
+            api_type="chat_completions",
+            request_id=request_id,
+            system_fingerprint=system_fingerprint,
         )
 
         logger.info(
@@ -430,6 +452,8 @@ async def make_openai_request(
                 "model": model,
                 "tokens": max_tokens,
                 "file": os.path.basename(file_path) if file_path else "unknown",
+                "request_id": request_id,
+                "system_fingerprint": system_fingerprint,
                 "type": drawing_type or "unknown",
             },
         )
@@ -633,8 +657,10 @@ async def process_drawing(
                 content = _strip_json_fences(content)
                 parsed = json.loads(content)
                 
-                # If we have title block text, try to repair metadata
-                if titleblock_text:
+                # Replace the metadata repair block with:
+                enable_repair = get_enable_metadata_repair()
+                if titleblock_text and enable_repair:
+                    logger.info("Metadata repair enabled; attempting from title block")
                     try:
                         repaired_metadata = await repair_metadata(titleblock_text, client, pdf_path)
                         if repaired_metadata:
@@ -646,6 +672,8 @@ async def process_drawing(
                             logger.info("Successfully repaired metadata from title block")
                     except Exception as e:
                         logger.warning(f"Metadata repair failed: {str(e)}")
+                elif titleblock_text and not enable_repair:
+                    logger.info("Metadata repair disabled by ENABLE_METADATA_REPAIR=false (skipping)")
                 
                 # Check for potential truncation
                 output_length = len(content)
