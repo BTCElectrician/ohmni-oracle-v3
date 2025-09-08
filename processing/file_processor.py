@@ -3,6 +3,7 @@ import os
 import logging
 import asyncio
 import json
+import uuid
 from enum import Enum, auto
 from typing import Dict, Any, Optional, List, TypedDict, Literal, Union, cast
 from datetime import datetime
@@ -20,6 +21,7 @@ from utils.drawing_utils import detect_drawing_info
 from utils.json_utils import parse_json_safely
 from schemas.metadata import DrawingMetadata
 from utils.exceptions import FileSystemError
+from config.settings import get_enable_metadata_repair
 
 
 # Constants for status messages
@@ -144,6 +146,7 @@ class FileProcessingPipeline:
         self.storage: FileSystemStorage = storage
         self.logger: logging.Logger = logger
         self.file_name: str = os.path.basename(pdf_path)
+        self.pipeline_id: str = str(uuid.uuid4())
         
         # Set up output paths
         self.output_drawing_type_folder: str = drawing_type if drawing_type else "General"
@@ -318,13 +321,18 @@ class FileProcessingPipeline:
             raw_content += f"\nTABLE:\n{table['content']}\n"
 
         # Process with AI
-        max_attempts = 2 if "mechanical" in processing_type.lower() else 1
+        mech_second_pass = os.getenv("MECH_SECOND_PASS", "true").lower() == "true"
+        max_attempts = 2 if ("mechanical" in processing_type.lower() and mech_second_pass) else 1
+        if not mech_second_pass and "mechanical" in processing_type.lower():
+            self.logger.info("MECH_SECOND_PASS=false → forcing single attempt for mechanical drawing")
         attempt = 0
         ai_error = None
 
         while attempt < max_attempts and self.processing_state["parsed_json_data"] is None:
             attempt += 1
-            self.logger.info(f"Attempt {attempt}/{max_attempts} for AI processing of {self.file_name}...")
+            self.logger.info(
+                f"Attempt {attempt}/{max_attempts} for AI processing of {self.file_name} (pipeline_id={self.pipeline_id})..."
+            )
             
             try:
                 # Process with AI
@@ -348,7 +356,14 @@ class FileProcessingPipeline:
                     "panel" in (self.processing_state.get("subtype") or "").lower() or
                     "mechanical" in processing_type.lower()
                 )
-                parsed_json = parse_json_safely(structured_json_str, repair=needs_repair)
+                # Gate JSON repair behind metadata repair setting
+                json_repair_enabled = get_enable_metadata_repair()
+                if needs_repair and not json_repair_enabled:
+                    self.logger.warning("JSON repair DISABLED by ENABLE_METADATA_REPAIR=false (skipping)")
+                parsed_json = parse_json_safely(
+                    structured_json_str, 
+                    repair=(needs_repair and json_repair_enabled)
+                )
                 
                 if parsed_json:
                     self.processing_state["parsed_json_data"] = parsed_json
@@ -533,12 +548,14 @@ class FileProcessingPipeline:
         Returns:
             Dictionary with processing results
         """
+        self.logger.info(f"PIPELINE_START file={self.file_name} pipeline_id={self.pipeline_id}")
         self.logger.info(f"🔄 Processing {self.file_name}")
         try:
             with tqdm(total=100, desc=f"Processing {self.file_name}", leave=False) as pbar:
                 # Step 1: Extract content
                 if not await self._step_extract_content():
                     pbar.update(100)
+                    self.logger.info(f"PIPELINE_END file={self.file_name} pipeline_id={self.pipeline_id}")
                     return cast(ProcessingResult, self.processing_state["final_status_dict"])
                 pbar.update(20)
 
@@ -549,6 +566,7 @@ class FileProcessingPipeline:
                 # Step 3: AI processing and parsing
                 if not await self._step_ai_processing_and_parsing():
                     pbar.update(70)  # remaining progress
+                    self.logger.info(f"PIPELINE_END file={self.file_name} pipeline_id={self.pipeline_id}")
                     return cast(ProcessingResult, self.processing_state["final_status_dict"])
                 pbar.update(40)  # AI + Parse
 
@@ -562,6 +580,7 @@ class FileProcessingPipeline:
                 # Step 6: Save output
                 if not await self._step_save_output():
                     pbar.update(20)  # remaining progress
+                    self.logger.info(f"PIPELINE_END file={self.file_name} pipeline_id={self.pipeline_id}")
                     return cast(ProcessingResult, self.processing_state["final_status_dict"])
                 pbar.update(10)  # Save
 
@@ -570,9 +589,11 @@ class FileProcessingPipeline:
                 pbar.update(10)  # Room templates
 
                 # Return final result
+                self.logger.info(f"PIPELINE_END file={self.file_name} pipeline_id={self.pipeline_id}")
                 return cast(ProcessingResult, self.processing_state["final_status_dict"])
         except Exception as e:
             self.logger.error(f"Unexpected error in processing pipeline: {str(e)}", exc_info=True)
+            self.logger.info(f"PIPELINE_END file={self.file_name} pipeline_id={self.pipeline_id}")
             return await self._save_pipeline_status(
                 ProcessingStatus.UNEXPECTED_ERROR, 
                 f"Unexpected pipeline error: {str(e)}"

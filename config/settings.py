@@ -36,8 +36,8 @@ if os.getenv("USE_SIMPLIFIED_PROCESSING") is not None:
 
 # Model Selection Configuration - Define as a function to reload each time
 def get_force_mini_model():
-    """Always reload from env to get the latest value"""
-    load_dotenv(override=True)
+    """Get the FORCE_MINI_MODEL setting from environment"""
+    # Respect the process environment; do not reload .env here
     return os.getenv("FORCE_MINI_MODEL", "false").lower() == "true"
 
 
@@ -45,18 +45,13 @@ def get_force_mini_model():
 FORCE_MINI_MODEL = get_force_mini_model()
 
 # Metadata repair toggle (dynamic)
-def get_enable_metadata_repair() -> bool:
-    """Return whether metadata repair is enabled. Prefer OS env over .env.
+def get_enable_metadata_repair():
+    """Get the ENABLE_METADATA_REPAIR setting from environment"""
+    # Respect the process environment; do not reload .env here
+    return os.getenv("ENABLE_METADATA_REPAIR", "false").lower() == "true"
 
-    Reload .env without overriding existing environment variables so that
-    runtime-exported values take precedence.
-    """
-    # Do not override existing environment variables (OS env wins)
-    load_dotenv(override=False)
-    raw = os.getenv("ENABLE_METADATA_REPAIR", "true") or "true"
-    # Allow inline comments and whitespace in .env values
-    cleaned = raw.split("#", 1)[0].strip().lower()
-    return cleaned == "true"
+# Standard definition for backward compatibility
+ENABLE_METADATA_REPAIR = get_enable_metadata_repair()
 
 # Model Configuration - Easy to change when new models come out
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o-mini")

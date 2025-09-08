@@ -34,11 +34,13 @@ show_help() {
     echo ""
     echo "Usage:"
     echo "  ohmni process <folder_name>     Process documents in a folder"
+    echo "  ohmni file <folder/file>        Process a single file within a folder"
     echo "  ohmni help                      Show this help message"
     echo ""
     echo "Examples:"
     echo "  ohmni process ElecShuffleTest   Process ElecShuffleTest folder"
-    echo "  ohmni process MyProject         Process MyProject folder"
+    echo "  ohmni file ElecShuffleTest/Electrical/E0.01-SPECIFICATIONS-Rev.3.pdf"
+    echo "  ohmni file MyProject/Mechanical/schedule.pdf"
     echo ""
     echo "The folder should be located in: /Users/collin/Desktop/"
     echo ""
@@ -114,6 +116,81 @@ process_folder() {
     return $exit_code
 }
 
+# Function to process a single file
+process_file() {
+    local file_path="$1"
+    local desktop_path="/Users/collin/Desktop"
+    local full_path="$desktop_path/$file_path"
+    
+    # Check if file exists
+    if [ ! -f "$full_path" ]; then
+        print_error "File '$file_path' not found in Desktop"
+        print_info "Make sure the path is relative to Desktop (e.g., ElecShuffleTest/Electrical/file.pdf)"
+        return 1
+    fi
+    
+    # Check if we're in the right directory (ohmni-oracle-v3)
+    if [ ! -f "main.py" ]; then
+        print_error "main.py not found. Please run this command from the ohmni-oracle-v3 directory"
+        print_info "Current directory: $(pwd)"
+        return 1
+    fi
+    
+    # Check if virtual environment is active
+    if [ -z "$VIRTUAL_ENV" ]; then
+        print_warning "Virtual environment not active. Activating..."
+        if [ -f "venv/bin/activate" ]; then
+            source venv/bin/activate
+            print_success "Virtual environment activated"
+        else
+            print_error "Virtual environment not found. Run 'make setup' first"
+            return 1
+        fi
+    fi
+    
+    # Extract folder and file info
+    local folder_name=$(dirname "$file_path" | cut -d'/' -f1)
+    local file_name=$(basename "$file_path")
+    local subfolder=$(dirname "$file_path" | cut -d'/' -f2-)
+    
+    # Create temporary folder structure
+    local temp_dir=$(mktemp -d)
+    local temp_file_path="$temp_dir/$subfolder/$file_name"
+    
+    # Create the subfolder structure in temp directory
+    mkdir -p "$(dirname "$temp_file_path")"
+    
+    # Copy the file to temp directory
+    cp "$full_path" "$temp_file_path"
+    
+    # Set output folder (same as original folder with /output suffix)
+    local output_path="$desktop_path/$folder_name/output"
+    
+    print_info "Processing single file: $file_name"
+    print_info "From folder: $folder_name/$subfolder"
+    print_info "Input path: $full_path"
+    print_info "Output path: $output_path"
+    echo ""
+    
+    # Run the main script on temp directory
+    print_success "Starting Ohmni Oracle v3 processing..."
+    python3 main.py "$temp_dir" "$output_path"
+    
+    local exit_code=$?
+    
+    # Clean up temp directory
+    rm -rf "$temp_dir"
+    
+    if [ $exit_code -eq 0 ]; then
+        print_success "Processing completed successfully!"
+        print_info "Results saved to: $output_path"
+    else
+        print_error "Processing failed with exit code: $exit_code"
+    fi
+    
+    return $exit_code
+}
+
 # Main script logic
 case "$1" in
     "process")
@@ -124,6 +201,15 @@ case "$1" in
             exit 1
         fi
         process_folder "$2"
+        ;;
+    "file")
+        if [ -z "$2" ]; then
+            print_error "Please specify a file path"
+            echo ""
+            show_help
+            exit 1
+        fi
+        process_file "$2"
         ;;
     "help"|"--help"|"-h")
         show_help

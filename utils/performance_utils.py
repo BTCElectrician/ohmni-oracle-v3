@@ -88,6 +88,19 @@ class PerformanceTracker:
     ):
         """
         Add a metric with explicit context.
+        
+        Notes:
+        - When category == "api_request", this method also updates aggregate API stats
+          (min/max/avg/count/total_time) internally by calling add_api_metric().
+          Do NOT call add_api_metric() separately for the same event, or API metrics
+          will be double-counted.
+          
+        Args:
+            category: Category name for the metric (e.g., 'extraction', 'api_request')
+            duration: Duration of the operation in seconds
+            file_path: Optional path to the file being processed
+            drawing_type: Optional type of drawing being processed
+            **kwargs: Additional context fields to store with the metric
         """
         file_name = os.path.basename(file_path) if file_path else "unknown"
         drawing_type = drawing_type or "unknown"

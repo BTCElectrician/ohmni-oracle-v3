@@ -329,8 +329,10 @@ async def make_responses_api_request(
 
         request_time = time.time() - start_time
 
+        # Get the global tracker and add metrics
         tracker = get_tracker()
-        tracker.add_api_metric(request_time)
+        # Note: add_metric_with_context('api_request') also updates API stats internally.
+        # Do not call add_api_metric() here to avoid double-counting.
         tracker.add_metric_with_context(
             category="api_request",
             duration=request_time,
@@ -432,8 +434,10 @@ async def make_openai_request(
         
         request_time = time.time() - start_time
 
+        # Get the global tracker and add metrics
         tracker = get_tracker()
-        tracker.add_api_metric(request_time)
+        # Note: add_metric_with_context('api_request') also updates API stats internally.
+        # Do not call add_api_metric() here to avoid double-counting.
         tracker.add_metric_with_context(
             category="api_request",
             duration=request_time,
@@ -658,22 +662,24 @@ async def process_drawing(
                 parsed = json.loads(content)
                 
                 # Replace the metadata repair block with:
-                enable_repair = get_enable_metadata_repair()
-                if titleblock_text and enable_repair:
-                    logger.info("Metadata repair enabled; attempting from title block")
+                if not titleblock_text:
+                    logger.info("Metadata repair SKIPPED: no title block text extracted")
+                elif get_enable_metadata_repair():
                     try:
                         repaired_metadata = await repair_metadata(titleblock_text, client, pdf_path)
                         if repaired_metadata:
+                            # Update metadata in the parsed content
                             if "DRAWING_METADATA" in parsed:
                                 parsed["DRAWING_METADATA"].update(repaired_metadata)
                             else:
                                 parsed["DRAWING_METADATA"] = repaired_metadata
+                            # Convert back to string
                             content = json.dumps(parsed)
                             logger.info("Successfully repaired metadata from title block")
                     except Exception as e:
                         logger.warning(f"Metadata repair failed: {str(e)}")
-                elif titleblock_text and not enable_repair:
-                    logger.info("Metadata repair disabled by ENABLE_METADATA_REPAIR=false (skipping)")
+                else:
+                    logger.warning("Metadata repair DISABLED by ENABLE_METADATA_REPAIR=false (skipping)")
                 
                 # Check for potential truncation
                 output_length = len(content)
@@ -748,7 +754,7 @@ async def repair_metadata(
     # ADD THIS HARD GATE AT THE VERY BEGINNING
     from config.settings import get_enable_metadata_repair
     if not get_enable_metadata_repair():
-        logger.info("Metadata repair disabled by ENABLE_METADATA_REPAIR=false")
+        logger.warning("Metadata repair DISABLED by ENABLE_METADATA_REPAIR=false")
         return {}
     
     if not titleblock_text:

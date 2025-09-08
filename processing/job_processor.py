@@ -169,6 +169,7 @@ async def process_job_site_async(job_folder: str, output_folder: str, client) ->
 
     # Create a queue of PDF files to process
     queue = asyncio.Queue()
+    enqueued_files = set()  # guard against accidental duplicate queueing
 
     # Group and prioritize files by drawing type
     files_by_type = {}
@@ -198,6 +199,11 @@ async def process_job_site_async(job_folder: str, output_folder: str, client) ->
                 f"Queueing {len(files)} {drawing_type} drawings (sorted by size)"
             )
             for pdf_file in files:
+                if pdf_file in enqueued_files:
+                    logger.warning(f"Duplicate detected during queueing (skipping): {pdf_file}")
+                    continue
+                enqueued_files.add(pdf_file)
+                logger.info(f"Queueing file: {os.path.basename(pdf_file)} [{drawing_type}]")
                 await queue.put((pdf_file, drawing_type))
 
     # Add any remaining file types not explicitly prioritized (also sorted by size)
@@ -209,12 +215,18 @@ async def process_job_site_async(job_folder: str, output_folder: str, client) ->
                 f"Queueing {len(files)} {drawing_type} drawings (sorted by size)"
             )
             for pdf_file in files:
+                if pdf_file in enqueued_files:
+                    logger.warning(f"Duplicate detected during queueing (skipping): {pdf_file}")
+                    continue
+                enqueued_files.add(pdf_file)
+                logger.info(f"Queueing file: {os.path.basename(pdf_file)} [{drawing_type}]")
                 await queue.put((pdf_file, drawing_type))
 
     # No pipeline-wide semaphore; API calls are rate-limited at call site
 
     # Determine optimal number of workers
     max_workers = min(BATCH_SIZE, os.cpu_count() or 4, len(pdf_files))
+    logger.info(f"📬 Total unique files queued: {len(enqueued_files)}")
     logger.info(f"🚀 Starting processing with {max_workers} workers")
 
     # Shared list to collect results
