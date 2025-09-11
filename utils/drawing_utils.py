@@ -24,6 +24,8 @@ def detect_drawing_info(filename: str) -> Tuple[str, Optional[str]]:
         "T": "Technology",
         "FA": "FireAlarm",
         "FP": "FireProtection",
+        "LV": "LowVoltage",
+        "LD": "LowVoltage",
         "FS": "FoodService",
         "AV": "AudioVisual",
         "H": "HVAC",
@@ -51,6 +53,11 @@ def detect_drawing_info(filename: str) -> Tuple[str, Optional[str]]:
                 term in filename_upper for term in ["PANEL", "SCHEDULE"]
             ):
                 return discipline, "PANEL_SCHEDULE"
+            # Check if low voltage drawings are fire alarm related
+            if discipline == "LowVoltage" and any(
+                term in filename_upper for term in ["FIRE", "ALARM", "SMOKE", "DETECTOR", "PULL", "STROBE", "HORN"]
+            ):
+                return "FireAlarm", "LOW_VOLTAGE"
             return discipline, None
 
     # Then check single letter codes

@@ -8,7 +8,7 @@ DRAWING_TYPES = {
     "Site": ["S", "SD"],
     "Civil": ["C", "CD"],
     "Low Voltage": ["LV", "LD"],
-    "Fire Alarm": ["FA", "FD"],
+    "Fire Alarm": ["FA", "FD", "LV", "LD"],
     "Kitchen": ["K", "KD"],
     "Specifications": ["SPEC", "SP"],
 }

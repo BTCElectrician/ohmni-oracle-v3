@@ -19,10 +19,10 @@ The primary goal is to convert unstructured data from PDF drawings into structur
 ### Core Processing
 *   **Asynchronous PDF Processing:** Efficiently handles multiple PDF files concurrently using Python's `asyncio`.
 *   **Batch Processing:** Processes entire "job sites" (folders of PDFs) with configurable batch sizes and concurrency limits.
-*   **Drawing Type Detection:** Automatically identifies the discipline of a drawing (Architectural, Electrical, Mechanical, Plumbing, General, etc.) based on filename conventions.
+*   **Drawing Type Detection:** Automatically identifies the discipline of a drawing (Architectural, Electrical, Mechanical, Plumbing, Fire Alarm, Low Voltage, General, etc.) based on filename conventions.
 *   **Content Extraction:**
     *   Utilizes PyMuPDF for robust text and table extraction from PDF documents.
-    *   Specialized extractors for different disciplines (Architectural, Electrical, Mechanical, Plumbing) with tailored logic to enhance relevant data (e.g., room information for Architectural, panel details for Electrical).
+    *   Specialized extractors for different disciplines (Architectural, Electrical, Mechanical, Plumbing, Fire Alarm) with tailored logic to enhance relevant data (e.g., room information for Architectural, panel details for Electrical, low voltage systems for Fire Alarm).
     *   Handles unreadable or empty PDFs gracefully by generating status files.
 *   **AI-Powered Data Extraction:**
     *   Integrates with OpenAI's API (configurable models, e.g., GPT-4o, GPT-4o-mini).
@@ -35,6 +35,7 @@ The primary goal is to convert unstructured data from PDF drawings into structur
         *   Electrical Panel Schedules
         *   Mechanical Equipment Schedules
         *   Plumbing Fixture/Equipment Schedules
+        *   Fire Alarm and Low Voltage Systems
     *   Uses Pydantic schemas for validating extracted metadata (e.g., PDF properties, drawing metadata).
 
 ### Job & Workflow Management
@@ -240,7 +241,7 @@ The script will:
 2.  **Job Orchestration (`processing/job_processor.py`):**
     *   Traverses the input job folder to find all PDF files (`utils/file_utils.py`).
     *   Determines the drawing type for each PDF (`utils/drawing_utils.py`, `utils/constants.py`).
-    *   Prioritizes files: Architectural > Electrical > Mechanical > Plumbing > General. Within each type, smaller files are processed first.
+    *   Prioritizes files: Architectural > Electrical > Mechanical > Plumbing > Fire Alarm > General. Within each type, smaller files are processed first.
     *   Puts PDF files into an asynchronous queue.
     *   Manages a pool of asynchronous workers (`process_worker`).
     *   Uses a semaphore to limit concurrent API calls (`MAX_CONCURRENT_API_CALLS`).
@@ -265,7 +266,7 @@ The script will:
         *   If AI processing or JSON parsing ultimately fails, an `ai_processing_failed` status file is created (potentially with the raw AI response).
     *   **Metadata Validation (`schemas/metadata.py`):** Validates `DRAWING_METADATA` if present in the parsed JSON.
     *   **Data Normalization (`services/normalizers.py`):**
-        *   If the parsed JSON corresponds to specific types (e.g., panel schedules, mechanical schedules, plumbing schedules), normalization functions are applied to standardize field names and data formats.
+        *   If the parsed JSON corresponds to specific types (e.g., panel schedules, mechanical schedules, plumbing schedules, fire alarm systems), normalization functions are applied to standardize field names and data formats.
     *   **Save Output (`services/storage_service.py`):**
         *   Saves the structured (and normalized) JSON data to a `_structured.json` file.
         *   Uses `aiofiles` for asynchronous file operations.
@@ -335,7 +336,7 @@ All output files are saved in the specified `output_folder`.
 
 ## Specialized Prompts vs. General Prompt (Performance Trade-off)
 
-We maintain discipline- and subtype-specific prompts under `templates/prompts/*.py` (Architectural, Electrical, Mechanical, Plumbing). Through testing, specialized prompts increased token usage and slowed uncached runs with little accuracy benefit on most drawings.
+We maintain discipline- and subtype-specific prompts under `templates/prompts/*.py` (Architectural, Electrical, Mechanical, Plumbing, Fire Alarm). Through testing, specialized prompts increased token usage and slowed uncached runs with little accuracy benefit on most drawings.
 
 Therefore, at runtime we default to a single comprehensive "GENERAL" prompt for all drawings:
 - **Faster cold runs** (fewer prompt tokens)
