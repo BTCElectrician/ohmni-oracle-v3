@@ -1,4 +1,4 @@
-# Ohmni Oracle Template - Construction Drawing Processor
+# Ohmni Oracle - Construction Drawing Processor
 
 <div align="center">
   <img src="assets/github-owl.png" alt="Ohmni Oracle Logo" width="400" height="200">
@@ -8,7 +8,7 @@
 
 ## Overview
 
-The Ohmni Oracle Template is a sophisticated Python-based backend system designed to process PDF construction drawings. It leverages Artificial Intelligence (specifically OpenAI's GPT models) to extract, structure, and normalize information from various types of construction documents, including architectural, electrical, mechanical, and plumbing drawings. The system is built for asynchronous, batch processing and includes features for performance monitoring, AI response caching, and robust error handling.
+The Ohmni Oracle is a sophisticated Python-based backend system designed to process PDF construction drawings. It leverages Artificial Intelligence (specifically OpenAI's GPT models) to extract, structure, and normalize information from various types of construction documents, including architectural, electrical, mechanical, and plumbing drawings. The system is built for asynchronous, batch processing and includes features for performance monitoring, AI response caching, and robust error handling.
 
 The primary goal is to convert unstructured data from PDF drawings into structured JSON output, making it usable for downstream analysis, data integration, or other construction technology applications.
 
@@ -50,7 +50,7 @@ The primary goal is to convert unstructured data from PDF drawings into structur
 ### Output & Reporting
 *   **Structured JSON Output:** Saves processed data as well-organized JSON files, typically one per input PDF.
 *   **Status & Error Reporting:** Generates distinct JSON files for successfully processed documents, unreadable documents, or documents that failed during extraction or AI processing.
-*   **Room Template Generation:** For architectural floor plans, it can generate `_a_rooms_details.json` and `_e_rooms_details.json` files based on predefined templates and extracted room data.
+*   **Room Generation:** For architectural floor plans, it can generate `_a_rooms_details.json` and `_e_rooms_details.json` files based on predefined structures and extracted room data.
 *   **Comprehensive Logging:**
     *   Structured logging with context.
     *   Logs to both console and timestamped files within the output directory.
@@ -86,12 +86,12 @@ The primary goal is to convert unstructured data from PDF drawings into structur
 │   ├── extraction_service.py # PDF content extraction logic
 │   ├── normalizers.py      # Data normalization routines
 │   └── storage_service.py  # Saving processed data
-├── templates/              # Prompt templates and output JSON templates
+├── templates/              # Prompts and output JSON structures
 │   ├── prompts/            # AI prompt definitions for various drawing types
 │   │   └── __init__.py     # Empty init file - decorators fire when modules imported
 │   ├── base_templates.py   # Base prompt structures
 │   ├── prompt_registry.py  # Central registry for managing and retrieving prompts
-│   ├── prompt_templates.py # Main interface for accessing prompt templates
+│   ├── prompt_templates.py # Main interface for accessing prompts
 │   └── room_templates.py   # Logic for generating room-specific JSON files
 ├── utils/                  # Utility modules
 │   ├── exceptions/         # Custom exception classes
@@ -116,7 +116,7 @@ The primary goal is to convert unstructured data from PDF drawings into structur
 | processing | Job orchestration and file-processing pipelines | Modified when changing workflow logic or concurrency behavior |
 | schemas | Pydantic data models for validation | Updated when JSON structures or metadata fields evolve |
 | services | Business logic modules for AI, extraction, normalization, storage | Edited when enhancing service capabilities or adding new services |
-| templates | Prompt text, room templates, and prompt registry code | Tweaked when refining AI prompts or output templates |
+| templates | Prompt text, room structures, and prompt registry code | Tweaked when refining AI prompts or output structures |
 | utils | Shared helper utilities, logging, performance, security | Extended when introducing new common functions or improving tooling |
 
 **Usage**: Add a new row whenever you create or remove a top-level directory. Update the descriptions if a folder's role changes or is relocated.
@@ -130,8 +130,8 @@ The primary goal is to convert unstructured data from PDF drawings into structur
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/BTCElectrician/ohmni-oracle-template.git
-    cd ohmni-oracle-template
+    git clone https://github.com/BTCElectrician/ohmni-oracle.git
+    cd ohmni-oracle
     ```
 
 2.  **Create and activate a virtual environment (recommended):**
@@ -226,7 +226,7 @@ The script will:
 1.  Traverse the `<input_folder>` to find all PDF files.
 2.  Queue them for processing based on type and size.
 3.  Process each PDF: extract content, send to AI, parse response, normalize data.
-4.  Save structured JSON output, status files, and (if applicable) room templates to the `<output_folder>`.
+4.  Save structured JSON output, status files, and (if applicable) room files to the `<output_folder>`.
 5.  Log progress and errors to the console and to log files in `<output_folder>/logs/`.
 6.  Generate and save performance metrics in `<output_folder>/metrics/`.
 
@@ -270,7 +270,7 @@ The script will:
         *   Saves the structured (and normalized) JSON data to a `_structured.json` file.
         *   Uses `aiofiles` for asynchronous file operations.
         *   Handles `datetime` objects correctly during JSON serialization.
-    *   **Room Template Generation (`templates/room_templates.py`):**
+    *   **Room Generation (`templates/room_templates.py`):**
         *   If the drawing is an Architectural floor plan, it processes the structured JSON to generate `_a_rooms_details.json` and `_e_rooms_details.json` files.
 
 4.  **Completion (`main.py`):**
@@ -293,7 +293,7 @@ All output files are saved in the specified `output_folder`.
     *   If JSON parsing fails but a raw AI response was received: `<output_folder>/<DrawingType>/<original_filename_base>_raw_response_error.txt`
     *   If saving the final JSON fails: `<output_folder>/<DrawingType>/<original_filename_base>_error.json` (with status "json_save_failed").
     *   For unexpected errors: `<output_folder>/<DrawingType>/<original_filename_base>_error.json` (with status "unexpected_error").
-*   **Room Templates (for Architectural floor plans):**
+*   **Room Files (for Architectural floor plans):**
     *   Location: `<output_folder>/Architectural/`
     *   Files:
         *   `<original_filename_base>_a_rooms_details.json`
@@ -318,7 +318,7 @@ All output files are saved in the specified `output_folder`.
 *   **`services/normalizers.py`**: Standardizes the structure and field names of the extracted JSON data for specific schedule types.
 *   **`services/storage_service.py`**: Manages asynchronous saving of output files (JSON, text).
 *   **`templates/prompt_registry.py`**: A central registry for AI prompts. Currently configured to route all requests to a single, comprehensive "GENERAL" prompt regardless of drawing type.
-*   **`templates/prompt_templates.py`**: Main interface for accessing prompt templates. Imports discipline-specific prompt modules to register them with the registry.
+*   **`templates/prompt_templates.py`**: Main interface for accessing prompts. Imports discipline-specific prompt modules to register them with the registry.
 *   **`templates/room_templates.py`**: Logic for generating structured room data JSON files from architectural drawing outputs.
 *   **`utils/performance_utils.py`**: A robust module for tracking, reporting, and saving performance metrics of various operations.
 *   **`utils/ai_cache.py`**: Implements caching for AI API responses to reduce costs and improve speed on repeated inputs.
