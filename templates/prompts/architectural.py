@@ -50,6 +50,7 @@ registry.register(
 IMPORTANT: Architecture drawings establish room numbering, construction, and finishes for all subsequent trades. 
 Accurate extraction and structure is essential for coordinated building systems. Missing or incorrect information 
 can cause construction conflicts and rework.
+\n+IMPORTANT: Return your final answer as a single, valid JSON object. Use double quotes for all keys and string values. Do not include explanations or markdown; output only the JSON.
 """,
     aliases=["A", "ARCH"],
 )

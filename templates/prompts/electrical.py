@@ -40,6 +40,7 @@ Structure all schedule information into consistent field names (e.g., use 'load_
 
 IMPORTANT: Ensure ALL circuits, equipment items, and notes are captured in your output. Missing information 
 can cause installation errors.
+\n+IMPORTANT: Return your final answer as a single, valid JSON object. Use double quotes for all keys and string values. Do not include explanations or markdown; output only the JSON.
 """,
     aliases=["E", "ELEC"],
 )

@@ -57,6 +57,7 @@ Example simplified structure:
 }
 
 CRITICAL: Engineers need EVERY mechanical element and specification value EXACTLY as shown - complete accuracy is essential for proper system design, ordering, and installation.
+\n+IMPORTANT: Return your final answer as a single, valid JSON object. Use double quotes for all keys and string values. Do not include explanations or markdown; output only the JSON.
 """,
     aliases=["M", "MECH"],
 )
