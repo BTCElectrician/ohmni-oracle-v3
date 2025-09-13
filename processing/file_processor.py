@@ -4,6 +4,7 @@ import logging
 import asyncio
 import json
 import uuid
+import time
 from enum import Enum, auto
 from typing import Dict, Any, Optional, List, TypedDict, Literal, Union, cast
 from datetime import datetime
@@ -229,6 +230,149 @@ class FileProcessingPipeline:
         extractor = create_extractor(self.processing_state["original_drawing_type"], self.logger)
         extraction_result = await extractor.extract(self.pdf_path)
         self.processing_state["extraction_result"] = extraction_result
+
+        # OCR augmentation when needed
+        from config.settings import OCR_ENABLED, OCR_THRESHOLD, OCR_MAX_PAGES
+        
+        # Enhanced OCR validation metrics
+        current_chars = len(extraction_result.raw_text.strip())
+        
+        # Expected character ranges by drawing type (for logging context only)
+        drawing_type = self.processing_state["processing_type_for_ai"].lower()
+        expected_per_page_ranges = {
+            "mechanical": "2000-3000 per page for schedules, 800-1500 for details",
+            "electrical": "1500-2500 per page for panel schedules, 500-1000 for details", 
+            "plumbing": "1200-2000 per page for schedules, 400-800 for details",
+            "architectural": "1000-2000 per page for floor plans, 600-1200 for details",
+            "general": "varies by drawing content and complexity"
+        }
+        expected_chars_per_page = expected_per_page_ranges.get(drawing_type.split('_')[0], "varies by drawing type")
+        
+        # Calculate pages for per-page analysis
+        try:
+            import pymupdf as fitz
+            with fitz.open(self.pdf_path) as doc:
+                page_count = len(doc)
+                chars_per_page = current_chars / page_count if page_count > 0 else current_chars
+        except Exception as e:
+            page_count = 1
+            chars_per_page = current_chars
+            self.logger.warning(f"Could not read PDF for page count: {e}")
+        
+        # Get intelligent OCR decision
+        from services.ocr_service import should_perform_ocr
+        should_ocr, decision_reason = should_perform_ocr(
+            extracted_text=extraction_result.raw_text,
+            pdf_path=self.pdf_path,
+            page_count=page_count,
+            ocr_enabled=OCR_ENABLED,
+            ocr_threshold=OCR_THRESHOLD
+        )
+        
+        # Create enhanced OCR decision metrics
+        ocr_decision_metrics = {
+            "performed": False,
+            "reason": decision_reason,
+            "chars_extracted": current_chars,
+            "chars_per_page": round(chars_per_page, 1),
+            "page_count": page_count,
+            "threshold_per_page": OCR_THRESHOLD,  # Now correctly documented as per-page
+            "drawing_type": drawing_type,
+            "expected_chars_per_page": expected_chars_per_page,
+            "ocr_enabled": OCR_ENABLED,
+            "should_ocr": should_ocr
+        }
+        
+        self.logger.info(f"🔍 OCR Analysis: {current_chars} chars total ({chars_per_page:.0f}/page), threshold={OCR_THRESHOLD}/page, decision='{decision_reason}'")
+
+        if OCR_ENABLED:
+            try:
+                from services.ocr_service import run_ocr_if_needed
+                
+                # Time the OCR operation for metrics
+                ocr_start_time = time.time()
+                
+                ocr_text = await run_ocr_if_needed(
+                    client=self.client,
+                    pdf_path=self.pdf_path,
+                    current_text=extraction_result.raw_text,
+                    threshold=OCR_THRESHOLD,
+                    max_pages=OCR_MAX_PAGES
+                )
+                
+                ocr_duration = time.time() - ocr_start_time
+                
+                # Update OCR decision metrics with results
+                if ocr_text:
+                    ocr_decision_metrics["performed"] = True
+                    ocr_decision_metrics["ocr_chars_added"] = len(ocr_text)
+                    ocr_decision_metrics["total_chars_after_ocr"] = current_chars + len(ocr_text)
+                    ocr_decision_metrics["ocr_duration_seconds"] = round(ocr_duration, 2)
+                    
+                    # Track OCR metrics in performance system
+                    from utils.performance_utils import get_tracker
+                    tracker = get_tracker()
+                    tracker.add_metric(
+                        "ocr_processing", self.file_name, 
+                        self.processing_state["processing_type_for_ai"], ocr_duration
+                    )
+                    
+                    extraction_result.raw_text += ocr_text
+                    extraction_result.has_content = True
+                    self.logger.info(f"✅ OCR SUCCESS: Added {len(ocr_text)} characters in {ocr_duration:.2f}s")
+                else:
+                    # OCR service already logged why it was skipped
+                    ocr_decision_metrics["ocr_duration_seconds"] = round(ocr_duration, 2)
+                    
+                # Save OCR decision metrics to performance tracker as context
+                try:
+                    from utils.performance_utils import get_tracker
+                    tracker = get_tracker()
+                    tracker.add_metric_with_context(
+                        "ocr_decision", self.file_name,
+                        self.processing_state["processing_type_for_ai"], 
+                        ocr_duration, ocr_decision_metrics
+                    )
+                except:
+                    pass
+                    
+            except Exception as e:
+                ocr_duration = time.time() - ocr_start_time if 'ocr_start_time' in locals() else 0
+                
+                # Update metrics for failed OCR
+                ocr_decision_metrics["performed"] = False
+                ocr_decision_metrics["reason"] = f"OCR failed: {str(e)}"
+                ocr_decision_metrics["ocr_duration_seconds"] = round(ocr_duration, 2)
+                
+                self.logger.warning(f"❌ OCR FAILED after {ocr_duration:.2f}s: {e}")
+                
+                # Track failed OCR attempts
+                try:
+                    from utils.performance_utils import get_tracker
+                    tracker = get_tracker()
+                    tracker.add_metric(
+                        "ocr_processing", self.file_name + "_FAILED", 
+                        self.processing_state["processing_type_for_ai"], ocr_duration
+                    )
+                    tracker.add_metric_with_context(
+                        "ocr_decision", self.file_name + "_FAILED",
+                        self.processing_state["processing_type_for_ai"], 
+                        ocr_duration, ocr_decision_metrics
+                    )
+                except:
+                    pass
+        else:
+            # OCR is disabled - still track the decision
+            try:
+                from utils.performance_utils import get_tracker
+                tracker = get_tracker()
+                tracker.add_metric_with_context(
+                    "ocr_decision", self.file_name,
+                    self.processing_state["processing_type_for_ai"], 
+                    0, ocr_decision_metrics
+                )
+            except:
+                pass
 
         if not extraction_result.success:
             await self._save_pipeline_status(

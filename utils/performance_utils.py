@@ -36,6 +36,8 @@ class PerformanceTracker:
             "queue_waiting": [],  # New category for queue waiting time
             "extraction_pdf_read": [],  # New subcategory for PDF reading
             "total_processing": [],
+            "ocr_processing": [],  # New category for OCR operations
+            "ocr_decision": [],  # New category for OCR decision metrics
         }
 
         # Add metrics for tracking API variability

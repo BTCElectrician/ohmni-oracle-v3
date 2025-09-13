@@ -16,7 +16,7 @@ GRID = 3  # 3x3 tiling
 DPI = 600  # High quality
 MODEL = "gpt-4o"  # Best OCR model
 TOKENS_PER_TILE = 1000  # Enough for construction text
-OVERLAP_PERCENT = 0.1  # 10% overlap between tiles to ensure no text loss
+OVERLAP_PERCENT = 0.1  # 10% overlap between tiles - proven to prevent text loss at boundaries
 
 
 def should_perform_ocr(extracted_text: str, pdf_path: str, page_count: int, ocr_enabled: bool = True, ocr_threshold: int = 1500) -> tuple[bool, str]:
@@ -68,6 +68,11 @@ async def ocr_page_with_tiling(
     - Uses PDF coordinates for correct tile boundaries
     - 10% overlap ensures no text is lost at tile boundaries
     - 3x3 grid @ 600 DPI for optimal accuracy on construction drawings
+    
+    Args:
+        client: OpenAI client for API calls
+        pdf_path: Path to the PDF file
+        page_num: Page number to process (0-indexed)
     """
     with fitz.open(pdf_path) as doc:
         if page_num >= len(doc):

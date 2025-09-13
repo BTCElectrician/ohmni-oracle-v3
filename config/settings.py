@@ -24,6 +24,11 @@ TIME_WINDOW = int(os.getenv("TIME_WINDOW", "60"))
 # Maximum concurrent API calls
 MAX_CONCURRENT_API_CALLS = int(os.getenv("MAX_CONCURRENT_API_CALLS", "20"))
 
+# OCR Configuration - Simple with production safety
+OCR_ENABLED = os.getenv("OCR_ENABLED", "true").lower() == "true"
+OCR_THRESHOLD = int(os.getenv("OCR_THRESHOLD", "1500"))  # Characters per page threshold (not total)
+OCR_MAX_PAGES = int(os.getenv("OCR_MAX_PAGES", "2"))
+
 # Processing Mode Configuration
 # DEPRECATED: This setting is no longer actively used in the codebase
 USE_SIMPLIFIED_PROCESSING = (
@@ -124,6 +129,10 @@ def get_all_settings() -> Dict[str, Any]:
         "RESPONSES_TIMEOUT_SECONDS": os.getenv("RESPONSES_TIMEOUT_SECONDS", "45"),
         "GPT5_FAILURE_THRESHOLD": os.getenv("GPT5_FAILURE_THRESHOLD", "2"),
         "GPT5_DISABLE_ON_EMPTY_OUTPUT": os.getenv("GPT5_DISABLE_ON_EMPTY_OUTPUT", "true"),
+        # OCR Configuration visibility
+        "OCR_ENABLED": OCR_ENABLED,
+        "OCR_THRESHOLD": OCR_THRESHOLD,
+        "OCR_MAX_PAGES": OCR_MAX_PAGES,
     }
 
 # Reduce logging noise from verbose modules
