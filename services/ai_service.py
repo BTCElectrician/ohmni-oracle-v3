@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 # Responses API configuration
 
 # Additional environment variables for stability
-RESPONSES_TIMEOUT_SECONDS = int(os.getenv("RESPONSES_TIMEOUT_SECONDS", "45"))
+RESPONSES_TIMEOUT_SECONDS = int(os.getenv("RESPONSES_TIMEOUT_SECONDS", "200"))
 ENABLE_GPT5_NANO = os.getenv("ENABLE_GPT5_NANO", "false").lower() == "true"
 SCHEDULES_ENABLED = os.getenv("SCHEDULES_ENABLED", "false").lower() == "true"
 # Deprecated: do not read at import time; use dynamic getter instead

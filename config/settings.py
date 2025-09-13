@@ -126,7 +126,7 @@ def get_all_settings() -> Dict[str, Any]:
         "USE_GPT5_API": os.getenv("USE_GPT5_API", "false"),
         "GPT5_FOR_LARGE_ONLY": os.getenv("GPT5_FOR_LARGE_ONLY", "true"),
         "GPT5_MIN_LENGTH_FOR_RESPONSES": os.getenv("GPT5_MIN_LENGTH_FOR_RESPONSES", str(MINI_CHAR_THRESHOLD)),
-        "RESPONSES_TIMEOUT_SECONDS": os.getenv("RESPONSES_TIMEOUT_SECONDS", "45"),
+        "RESPONSES_TIMEOUT_SECONDS": os.getenv("RESPONSES_TIMEOUT_SECONDS", "200"),
         "GPT5_FAILURE_THRESHOLD": os.getenv("GPT5_FAILURE_THRESHOLD", "2"),
         "GPT5_DISABLE_ON_EMPTY_OUTPUT": os.getenv("GPT5_DISABLE_ON_EMPTY_OUTPUT", "true"),
         # OCR Configuration visibility
