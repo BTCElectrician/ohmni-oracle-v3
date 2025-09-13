@@ -229,16 +229,36 @@ async def make_responses_api_request(
 ) -> Any:
     start_time = time.time()
     try:
+        # Ensure 'json' appears in the input payload when using text.format=json_object
+        # Some providers require the literal word 'json' in the input messages.
+        adjusted_input = input_text or ""
+        if "json" not in adjusted_input.lower():
+            adjusted_input = adjusted_input + "\n\nNOTE: Return output as JSON."
+
         params: Dict[str, Any] = {
             "model": model,
             "store": False,
-            "input": input_text,
+            "input": adjusted_input,
             "max_output_tokens": max_tokens,
-            "text": {"format": "json"},
         }
+        
+        # Text formatting parameters - API requires object format for text.format
+        is_gpt5 = model == "gpt-5" or model.startswith("gpt-5")
+        if is_gpt5:
+            params["text"] = {
+                "format": {"type": "json_object"},  # Valid types: json_object | text | json_schema
+                "verbosity": "low"
+            }
+        else:
+            # Non-GPT5 models can also use the same format
+            params["text"] = {
+                "format": {"type": "json_object"},  # Valid types: json_object | text | json_schema
+                "verbosity": "low"
+            }
+        
         if instructions:
             params["instructions"] = instructions
-        if model == "gpt-5":
+        if is_gpt5:
             effort = _validate_reasoning_effort()
             params["reasoning"] = {"effort": effort}
             logger.debug(f"Adding reasoning.effort={effort} for {model}")
@@ -310,7 +330,7 @@ async def make_responses_api_request(
                 "model": model,
                 "reasoning": params.get("reasoning", {}).get("effort", "none"),
                 "tokens": max_tokens,
-                "text_format": "json",
+                "text_format": "json_object",
                 "file": os.path.basename(file_path) if file_path else "unknown",
                 "type": drawing_type or "unknown",
                 "request_id": getattr(response, "id", "unknown"),
