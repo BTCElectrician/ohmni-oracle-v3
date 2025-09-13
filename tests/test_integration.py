@@ -63,29 +63,26 @@ class IntegrationTests(unittest.TestCase):
             try:
                 from unittest.mock import patch
 
+                # Patch the Responses API call to avoid network I/O
                 with patch(
-                    "services.ai_service.DrawingAiService.process_with_prompt",
+                    "services.ai_service.make_responses_api_request",
                     return_value=json.dumps({"test": "success"}),
                 ):
-                    with patch(
-                        "services.ai_service.DrawingAiService.get_example_output",
-                        return_value=None,
-                    ):
-                        result = await process_drawing(
-                            raw_content=mock_content,
-                            drawing_type="Electrical",
-                            client=self.client,
-                            file_name="test_panel.pdf",
-                        )
-                        self.assertIsInstance(result, str)
-                        # Just verify it's JSON, we're not testing the actual content here
-                        try:
-                            json.loads(result)
-                            self.assertTrue(
-                                True
-                            )  # If we get here, it parsed successfully
-                        except json.JSONDecodeError:
-                            self.fail("Result is not valid JSON")
+                    result = await process_drawing(
+                        raw_content=mock_content,
+                        drawing_type="Electrical",
+                        client=self.client,
+                        pdf_path="test_panel.pdf",
+                    )
+                    self.assertIsInstance(result, str)
+                    # Just verify it's JSON, we're not testing the actual content here
+                    try:
+                        json.loads(result)
+                        self.assertTrue(
+                            True
+                        )  # If we get here, it parsed successfully
+                    except json.JSONDecodeError:
+                        self.fail("Result is not valid JSON")
             except Exception as e:
                 self.fail(f"Integration test failed: {str(e)}")
 

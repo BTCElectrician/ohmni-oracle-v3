@@ -1,6 +1,5 @@
 """
-AI service for processing drawing content.
-Dual-compatible with both GPT-4.x (via response_format) and GPT-5 (without response_format).
+AI service for processing drawing content using the unified Responses API (gpt-5).
 """
 import json
 import logging
@@ -40,27 +39,7 @@ from utils.ai_cache import load_cache, save_cache
 # Initialize logger at module level
 logger = logging.getLogger(__name__)
 
-def _uses_max_completion_tokens(model: str) -> bool:
-    """
-    Newer Chat Completions models (gpt-4.1*, gpt-4o*, gpt-5*) require 'max_completion_tokens'
-    instead of 'max_tokens'.
-    """
-    m = (model or "").lower()
-    return any(k in m for k in ["gpt-4.1", "gpt-4o", "gpt-5"])
-
-# ============== DUAL MODEL CONFIGURATION ==============
-# Supports both GPT-4.x (with response_format) and GPT-5 (without response_format)
-USE_GPT5_API = os.getenv("USE_GPT5_API", "false").lower() == "true"
-
-# Model mapping for GPT-5 (when USE_GPT5_API=true)
-GPT5_MODEL_MAP = {
-    "gpt-4o-mini": "gpt-5-mini",
-    "gpt-4o": "gpt-5",
-    "gpt-4.1-mini": "gpt-5-mini",
-    "gpt-4.1": "gpt-5",
-    "gpt-3.5-turbo": "gpt-5-nano",
-    # Add any custom mappings
-}
+# Responses API configuration
 
 # Additional environment variables for stability
 RESPONSES_TIMEOUT_SECONDS = int(os.getenv("RESPONSES_TIMEOUT_SECONDS", "45"))
@@ -69,9 +48,7 @@ SCHEDULES_ENABLED = os.getenv("SCHEDULES_ENABLED", "false").lower() == "true"
 # Deprecated: do not read at import time; use dynamic getter instead
 # ENABLE_METADATA_REPAIR = os.getenv("ENABLE_METADATA_REPAIR", "true").lower() == "true"
 
-# NEW: Routing and stability toggles
-GPT5_FOR_LARGE_ONLY = os.getenv("GPT5_FOR_LARGE_ONLY", "true").lower() == "true"
-GPT5_MIN_LENGTH_FOR_RESPONSES = int(os.getenv("GPT5_MIN_LENGTH_FOR_RESPONSES", str(MINI_CHAR_THRESHOLD)))
+# NEW: Stability toggles
 GPT5_FAILURE_THRESHOLD = int(os.getenv("GPT5_FAILURE_THRESHOLD", "2"))
 GPT5_DISABLE_ON_EMPTY_OUTPUT = os.getenv("GPT5_DISABLE_ON_EMPTY_OUTPUT", "true").lower() == "true"
 
@@ -85,7 +62,7 @@ def _gpt5_note_failure(reason: str = ""):
     logger.warning(f"GPT-5 failure {_gpt5_failures}/{GPT5_FAILURE_THRESHOLD} (reason: {reason})")
     if GPT5_DISABLE_ON_EMPTY_OUTPUT and _gpt5_failures >= GPT5_FAILURE_THRESHOLD:
         _gpt5_circuit_open = True
-        logger.warning("GPT-5 circuit opened for remainder of run; routing to Chat Completions.")
+        logger.warning("GPT-5 circuit opened for remainder of run; suppressing further calls this run.")
 
 def _gpt5_reset():
     global _gpt5_failures, _gpt5_circuit_open
@@ -170,49 +147,42 @@ def optimize_model_parameters(
 
     # PRIORITY 1: Schedules/specs ALWAYS use schedule model regardless of size or overrides
     if is_schedule:
-        model = SCHEDULE_MODEL  # Will map to gpt-5 when USE_GPT5_API=true
-        temperature = LARGE_MODEL_TEMP
+        model = SCHEDULE_MODEL
+        temperature = 1.0
         max_tokens = LARGE_MODEL_MAX_TOKENS
         logger.info(f"Using schedule model for schedule/spec document ({content_length} chars)")
     
     # PRIORITY 2: Force mini override for non-schedules (emergency cost control)
     elif force_mini:
-        model = DEFAULT_MODEL  # Will map to gpt-5-mini when USE_GPT5_API=true
-        temperature = DEFAULT_MODEL_TEMP
+        model = DEFAULT_MODEL
+        temperature = 1.0
         max_tokens = DEFAULT_MODEL_MAX_TOKENS
         logger.info(f"Force-mini override active; using mini model for non-schedule ({content_length} chars)")
     
     # PRIORITY 3: Size-based bucket selection for normal operation
     elif content_length < NANO_CHAR_THRESHOLD:
         # Small documents < 3K chars: Use nano/tiny
-        model = TINY_MODEL if TINY_MODEL else DEFAULT_MODEL  # Will map to gpt-5-nano when USE_GPT5_API=true
-        temperature = TINY_MODEL_TEMP if TINY_MODEL else DEFAULT_MODEL_TEMP
+        model = TINY_MODEL if TINY_MODEL else DEFAULT_MODEL
+        temperature = 1.0
         max_tokens = TINY_MODEL_MAX_TOKENS if TINY_MODEL else DEFAULT_MODEL_MAX_TOKENS
         logger.info(f"Using nano/tiny model for small document ({content_length} chars)")
     
     elif content_length < MINI_CHAR_THRESHOLD:
         # Medium documents 3K-15K chars: Use mini
-        model = DEFAULT_MODEL  # Will map to gpt-5-mini when USE_GPT5_API=true
-        temperature = DEFAULT_MODEL_TEMP
+        model = DEFAULT_MODEL
+        temperature = 1.0
         max_tokens = DEFAULT_MODEL_MAX_TOKENS
         logger.info(f"Using mini model for medium document ({content_length} chars)")
     
     else:
         # Large documents > 15K chars: Use full model
-        model = LARGE_DOC_MODEL  # Will map to gpt-5 when USE_GPT5_API=true
-        temperature = LARGE_MODEL_TEMP
+        model = LARGE_DOC_MODEL
+        temperature = 1.0
         max_tokens = LARGE_MODEL_MAX_TOKENS
         logger.info(f"Using full model for large document ({content_length} chars)")
 
-    # Map to GPT-5 models if enabled (existing logic)
-    if USE_GPT5_API:
-        original_model = model
-        model = GPT5_MODEL_MAP.get(model, model)
-        if model != original_model:
-            logger.info(f"Mapped {original_model} -> {model} (GPT-5 mode)")
-
-    # Dynamic token allocation for large documents (existing logic)
-    if model in [LARGE_DOC_MODEL, SCHEDULE_MODEL] or (USE_GPT5_API and model == "gpt-5"):
+    # Dynamic token allocation for large documents
+    if model in [LARGE_DOC_MODEL, SCHEDULE_MODEL]:
         # Scale tokens based on input size
         if content_length > 35000:  # Massive specs/drawings
             max_tokens = min(ACTUAL_MODEL_MAX_COMPLETION_TOKENS, max_tokens * 2)
@@ -224,13 +194,9 @@ def optimize_model_parameters(
     # Build parameters
     params = {
         "model": model,
-        "temperature": temperature,
+        "temperature": 1.0,  # gpt-5 requires temperature omitted or set to 1
         "max_tokens": min(max_tokens, ACTUAL_MODEL_MAX_COMPLETION_TOKENS),
     }
-
-    # Special handling for panel schedules - always use 0 temperature (existing logic)
-    if "panel" in drawing_type.lower() or "schedule" in drawing_type.lower():
-        params["temperature"] = 0.0
 
     # Log final selection with size bucket info
     size_bucket = "nano" if content_length < NANO_CHAR_THRESHOLD else \
@@ -244,7 +210,7 @@ def optimize_model_parameters(
     return params
 
 
-# ============== NEW: Responses API Request Function ==============
+# ============== Responses API Request Function ==============
 @retry(
     stop=stop_after_attempt(2),
     wait=wait_exponential(multiplier=1, min=3, max=8),
@@ -263,24 +229,19 @@ async def make_responses_api_request(
 ) -> Any:
     start_time = time.time()
     try:
-        m = (model or "").lower()
-        is_gpt5 = m.startswith("gpt-5")
-
         params: Dict[str, Any] = {
             "model": model,
+            "store": False,
             "input": input_text,
             "max_output_tokens": max_tokens,
+            "text": {"format": "json"},
         }
-        if not is_gpt5:
-            params["response_format"] = {"type": "json_object"}
-        if is_gpt5:
-            params["text"] = {"verbosity": "low"}
-            if instructions:
-                params["instructions"] = instructions
-            if model == "gpt-5":
-                effort = _validate_reasoning_effort()
-                params["reasoning"] = {"effort": effort}
-                logger.debug(f"Adding reasoning.effort={effort} for {model}")
+        if instructions:
+            params["instructions"] = instructions
+        if model == "gpt-5":
+            effort = _validate_reasoning_effort()
+            params["reasoning"] = {"effort": effort}
+            logger.debug(f"Adding reasoning.effort={effort} for {model}")
 
         response = await asyncio.wait_for(
             client.responses.create(**params),
@@ -349,7 +310,7 @@ async def make_responses_api_request(
                 "model": model,
                 "reasoning": params.get("reasoning", {}).get("effort", "none"),
                 "tokens": max_tokens,
-                "response_format": "json_object" if not is_gpt5 else "none",
+                "text_format": "json",
                 "file": os.path.basename(file_path) if file_path else "unknown",
                 "type": drawing_type or "unknown",
                 "request_id": getattr(response, "id", "unknown"),
@@ -370,121 +331,18 @@ async def make_responses_api_request(
 # =================================================================
 
 
-@retry(
-    stop=stop_after_attempt(2),
-    wait=wait_exponential(multiplier=1, min=3, max=8),
-    retry=retry_if_exception_type((AIProcessingError)),
-    before_sleep=before_sleep_log(logger, logging.WARNING),
-)
-async def make_openai_request(
-    client: AsyncOpenAI,
-    messages: List[Dict[str, str]],
-    model: str,
-    temperature: float,
-    max_tokens: int,
-    response_format: Dict[str, str] = {"type": "json_object"},
-    file_path: Optional[str] = None,
-    drawing_type: Optional[str] = None,
-) -> Any:
-    """
-    Make a request to the OpenAI API with timing and retry logic.
-    
-    FIXED 2025-09-04: reasoning.effort parameter only works with main "gpt-5" model,
-    not with gpt-5-mini or gpt-5-nano variants.
-    """
-    start_time = time.time()
-    try:
-        # Build base parameters - these work for ALL models
-        token_param = "max_completion_tokens" if _uses_max_completion_tokens(model) else "max_tokens"
-        params = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            token_param: max_tokens,
-            "response_format": response_format,
-        }
-        
-        # Only add reasoning.effort for EXACT "gpt-5" model
-        if model == "gpt-5":
-            reasoning_effort = _validate_reasoning_effort()
-            params["reasoning"] = {"effort": reasoning_effort}
-            logger.debug(f"Added reasoning.effort={reasoning_effort} for {model}")
-        
-        # Add this right before response = await client.chat.completions.create(**params)
-        try:
-            logger.info(
-                "OpenAI Chat API request starting",
-                extra={"model": model, "file": os.path.basename(file_path) if file_path else "unknown",
-                       "type": drawing_type or "unknown", "tokens": max_tokens}
-            )
-        except Exception:
-            pass
-        
-        # Make the API call with properly filtered parameters
-        response = await client.chat.completions.create(**params)
-        
-        # Add this right after response = await client.chat.completions.create(**params)
-        request_id = getattr(response, "id", "unknown")
-        system_fingerprint = getattr(response, "system_fingerprint", None)
-        
-        # Log token usage
-        usage = response.usage
-        if usage:
-            logger.info(f"Token usage - Input: {usage.prompt_tokens}, Output: {usage.completion_tokens}")
-        
-        request_time = time.time() - start_time
-
-        # Get the global tracker and add metrics
-        tracker = get_tracker()
-        # Note: add_metric_with_context('api_request') also updates API stats internally.
-        # Do not call add_api_metric() here to avoid double-counting.
-        tracker.add_metric_with_context(
-            category="api_request",
-            duration=request_time,
-            file_path=file_path,
-            drawing_type=drawing_type,
-            model=model,
-            api_type="chat_completions",
-            request_id=request_id,
-            system_fingerprint=system_fingerprint,
-        )
-
-        logger.info(
-            "OpenAI Chat API request completed",
-            extra={
-                "duration": f"{request_time:.2f}s",
-                "model": model,
-                "tokens": max_tokens,
-                "file": os.path.basename(file_path) if file_path else "unknown",
-                "request_id": request_id,
-                "system_fingerprint": system_fingerprint,
-                "type": drawing_type or "unknown",
-            },
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        request_time = time.time() - start_time
-        logger.error(
-            "OpenAI Chat API request failed",
-            extra={"duration": f"{request_time:.2f}s", "error": str(e), "model": model},
-        )
-        raise AIProcessingError(f"OpenAI API request failed: {str(e)}")
-
-
 async def call_with_cache(
     client: AsyncOpenAI,
     messages: List[Dict[str, str]],
     model: str,
     temperature: float,
     max_tokens: int,
-    response_format: Dict[str, str] = {"type": "json_object"},
     file_path: Optional[str] = None,
     drawing_type: Optional[str] = None,
     instructions: Optional[str] = None,
 ) -> Any:
     """
-    Call OpenAI API with optional caching.
-    Hybrid routing between Responses API (GPT-5) and Chat Completions based on configuration, size, and circuit breaker.
+    Call Responses API with optional caching.
     """
     # Extract prompt from messages
     prompt = messages[-1]["content"]
@@ -495,9 +353,9 @@ async def call_with_cache(
     # Prepare parameters for cache key (include api_type and instructions for uniqueness)
     params = {
         "model": model,
-        "temperature": temperature,
+        "temperature": 1.0,
         "max_tokens": max_tokens,
-        "api_type": "responses" if USE_GPT5_API else "chat",
+        "api_type": "responses",
         "instructions": (instructions or ""),
     }
 
@@ -506,61 +364,42 @@ async def call_with_cache(
     if cached_response:
         return cached_response
 
-    # Decide routing
-    use_responses = (
-        USE_GPT5_API
-        and not _gpt5_circuit_open
-        and (not GPT5_FOR_LARGE_ONLY or is_special or content_length >= GPT5_MIN_LENGTH_FOR_RESPONSES)
-    )
-
-    if use_responses:
-        final_instructions = instructions or JSON_EXTRACTOR_INSTRUCTIONS
-        try:
-            content = await make_responses_api_request(
-                client=client,
-                input_text=prompt,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                file_path=file_path,
-                drawing_type=drawing_type,
-                instructions=final_instructions,
-            )
-        except AIProcessingError as e:
-            logger.warning(f"Responses API failed, attempting fallback chain: {str(e)}")
-            fallback_chain = os.getenv("MODEL_FALLBACK_CHAIN", "gpt-4.1-mini,gpt-4.1")
-            content = None
-            for fb_model in [m.strip() for m in fallback_chain.split(",") if m.strip()]:
-                try:
-                    content = await make_openai_request(
-                        client=client,
-                        messages=messages,
-                        model=fb_model,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        response_format=response_format,
-                        file_path=file_path,
-                        drawing_type=drawing_type,
-                    )
-                    logger.info(f"Fallback succeeded with model {fb_model}")
-                    break
-                except AIProcessingError as inner_e:
-                    logger.warning(f"Fallback model {fb_model} failed: {str(inner_e)}")
-                    content = None
-            if not content:
-                raise
-    else:
-        # Use Chat Completions API
-        content = await make_openai_request(
+    # Always use Responses API with optional fallback chain across Responses models
+    final_instructions = instructions or JSON_EXTRACTOR_INSTRUCTIONS
+    try:
+        content = await make_responses_api_request(
             client=client,
-            messages=messages,
+            input_text=prompt,
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
-            response_format=response_format,
             file_path=file_path,
             drawing_type=drawing_type,
+            instructions=final_instructions,
         )
+    except AIProcessingError as e:
+        logger.warning(f"Responses API failed, attempting fallback chain: {str(e)}")
+        fallback_chain = os.getenv("MODEL_FALLBACK_CHAIN", "gpt-5-mini,gpt-5")
+        content = None
+        for fb_model in [m.strip() for m in fallback_chain.split(",") if m.strip()]:
+            try:
+                content = await make_responses_api_request(
+                    client=client,
+                    input_text=prompt,
+                    model=fb_model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    file_path=file_path,
+                    drawing_type=drawing_type,
+                    instructions=final_instructions,
+                )
+                logger.info(f"Fallback succeeded with model {fb_model}")
+                break
+            except AIProcessingError as inner_e:
+                logger.warning(f"Fallback model {fb_model} failed: {str(inner_e)}")
+                content = None
+        if not content:
+            raise
 
     # Save to cache
     save_cache(prompt, params, content)
@@ -598,8 +437,7 @@ async def process_drawing(
     raw_content: str, drawing_type: str, client: AsyncOpenAI, pdf_path: str = "", titleblock_text: Optional[str] = None
 ) -> str:
     """
-    Process drawing content using AI to convert to structured JSON.
-    Now supports both Chat Completions and Responses API via configuration.
+    Process drawing content using AI to convert to structured JSON via the Responses API.
     """
     if not raw_content:
         raise AIProcessingError("Cannot process empty content")
@@ -631,7 +469,7 @@ async def process_drawing(
         system_message += "\n\nFormat your entire response as a valid JSON object."
 
     logger.info(f"Prompt key used: {drawing_type}_{subtype if subtype else ''}")
-    logger.info(f"API mode: {'GPT-5 Responses' if USE_GPT5_API else 'Chat Completions'}")
+    logger.info(f"API mode: Responses")
 
     # Get optimized model parameters
     params = optimize_model_parameters(drawing_type, raw_content, pdf_path)
@@ -769,8 +607,6 @@ async def repair_metadata(
     try:
         # Determine which model to use for metadata repair
         repair_model = TINY_MODEL if TINY_MODEL else DEFAULT_MODEL
-        if USE_GPT5_API:
-            repair_model = GPT5_MODEL_MAP.get(repair_model, "gpt-5-nano")
         
         content = await call_with_cache(
             client=client,
@@ -779,7 +615,7 @@ async def repair_metadata(
                 {"role": "user", "content": titleblock_text},
             ],
             model=repair_model,
-            temperature=TINY_MODEL_TEMP if TINY_MODEL else DEFAULT_MODEL_TEMP,
+            temperature=1.0,
             max_tokens=min(1000, TINY_MODEL_MAX_TOKENS if TINY_MODEL else DEFAULT_MODEL_MAX_TOKENS),
             file_path=pdf_path,
             drawing_type="metadata_repair",

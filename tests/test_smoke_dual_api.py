@@ -55,15 +55,14 @@ def test_optimize_model_parameters_basic():
     )
     
     assert isinstance(params_schedule, dict)
-    assert params_schedule["temperature"] == 0.0  # Schedules always use 0 temp
+    assert params_schedule["temperature"] == 1.0  # gpt-5 requires temperature=1
 
 
 def test_env_variables():
     """Test that our new environment variables are properly read."""
     # Test default values
-    from services.ai_service import USE_GPT5_API, RESPONSES_TIMEOUT_SECONDS
+    from services.ai_service import RESPONSES_TIMEOUT_SECONDS
     
-    assert isinstance(USE_GPT5_API, bool)
     assert isinstance(RESPONSES_TIMEOUT_SECONDS, int)
     assert RESPONSES_TIMEOUT_SECONDS > 0
 

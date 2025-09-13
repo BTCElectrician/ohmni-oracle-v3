@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 # Fixed configuration (proven to work)
 GRID = 3  # 3x3 tiling
 DPI = 600  # High quality
-MODEL = "gpt-4o"  # Best OCR model
+MODEL = "gpt-5"  # Use GPT-5 Responses API for OCR
 TOKENS_PER_TILE = 1000  # Enough for construction text
 OVERLAP_PERCENT = 0.1  # 10% overlap between tiles - proven to prevent text loss at boundaries
 
@@ -130,21 +130,51 @@ async def ocr_page_with_tiling(
                     tile_pix = page.get_pixmap(matrix=matrix, clip=tile_rect, alpha=False)
                     img_b64 = base64.b64encode(tile_pix.tobytes("png")).decode()
                     
-                    # OCR with correct token parameter
-                    response = await client.chat.completions.create(
+                    # OCR via Responses API (vision)
+                    response = await client.responses.create(
                         model=MODEL,
-                        messages=[{
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": "Extract ALL text from this construction drawing section:"},
-                                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}}
-                            ]
-                        }],
-                        temperature=0,
-                        max_completion_tokens=TOKENS_PER_TILE  # CRITICAL: correct parameter name
+                        store=False,
+                        input=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "input_text", "text": "Extract ALL text from this construction drawing section:"},
+                                    {"type": "input_image", "image_url": f"data:image/png;base64,{img_b64}"},
+                                ],
+                            }
+                        ],
+                        max_output_tokens=TOKENS_PER_TILE,
                     )
-                    
-                    text = response.choices[0].message.content
+
+                    # Prefer output_text; fallback to collecting text from output items
+                    text = (getattr(response, "output_text", "") or "").strip()
+                    if not text:
+                        try:
+                            collected = []
+                            for item in (getattr(response, "output", []) or []):
+                                contents = (item.get("content") if isinstance(item, dict) else getattr(item, "content", None)) or []
+                                for c in contents:
+                                    tb = None
+                                    if isinstance(c, dict):
+                                        if "text" in c:
+                                            tfield = c["text"]
+                                            if isinstance(tfield, dict) and "value" in tfield:
+                                                tb = tfield.get("value")
+                                            elif isinstance(tfield, str):
+                                                tb = tfield
+                                        elif "value" in c:
+                                            tb = c.get("value")
+                                    else:
+                                        tf = getattr(c, "text", None)
+                                        if isinstance(tf, str):
+                                            tb = tf
+                                        elif hasattr(tf, "value"):
+                                            tb = getattr(tf, "value", None)
+                                    if tb:
+                                        collected.append(str(tb))
+                            text = "\n".join([s for s in collected if s]).strip()
+                        except Exception:
+                            text = ""
                     if text and text.strip():
                         ocr_texts.append(text.strip())
                         

@@ -5,7 +5,7 @@ import os
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 from templates.prompts.electrical import lighting_fixture_prompt
-from services.ai_service import DrawingAiService
+from services.ai_service import process_drawing
 from config.settings import DEFAULT_MODEL
 
 # Set up logging
@@ -73,18 +73,15 @@ async def test_lighting_prompt():
     prompt = lighting_fixture_prompt()
     logging.info("Using the lighting fixture prompt template")
 
-    # Create a DrawingAiService instance
-    service = DrawingAiService(client)
-
-    # Process the mock content with the prompt
+    # Process the mock content directly via Responses API service
     logging.info("Processing mock lighting drawing content...")
     try:
-        result = await service.process_with_prompt(
+        result = await process_drawing(
             raw_content=mock_content,
-            temperature=0.2,
-            max_tokens=4000,
-            model=DEFAULT_MODEL,
-            system_message=prompt,
+            drawing_type="Electrical",
+            client=client,
+            pdf_path="lighting_mock.pdf",
+            titleblock_text=None,
         )
 
         # Print the result
