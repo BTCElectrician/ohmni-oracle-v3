@@ -1,5 +1,5 @@
 """
-AI service for processing drawing content using the Chat Completions API (gpt-5).
+AI service for processing drawing content using the Chat Completions API.
 """
 import json
 import logging
@@ -39,11 +39,10 @@ from utils.ai_cache import load_cache, save_cache
 # Initialize logger at module level
 logger = logging.getLogger(__name__)
 
-# Responses API configuration
+# Chat Completions configuration
 
 # Additional environment variables for stability
 RESPONSES_TIMEOUT_SECONDS = int(os.getenv("RESPONSES_TIMEOUT_SECONDS", "200"))
-ENABLE_GPT5_NANO = os.getenv("ENABLE_GPT5_NANO", "false").lower() == "true"
 SCHEDULES_ENABLED = os.getenv("SCHEDULES_ENABLED", "false").lower() == "true"
 # Deprecated: do not read at import time; use dynamic getter instead
 # ENABLE_METADATA_REPAIR = os.getenv("ENABLE_METADATA_REPAIR", "true").lower() == "true"
@@ -102,8 +101,7 @@ async def make_chat_completion_request(
     instructions: Optional[str] = None,
 ) -> str:
     """
-    Make a Chat Completions API request with GPT-5 models.
-    Simplified version without reasoning chains or complex verbosity settings.
+    Make a Chat Completions API request with standard parameters.
     """
     start_time = time.time()
     
@@ -115,28 +113,14 @@ async def make_chat_completion_request(
             {"role": "user", "content": input_text}
         ]
         
-        # Determine reasoning effort based on model and task complexity
-        reasoning_effort = "minimal"
-        if model == "gpt-5":
-            reasoning_effort = "low"  # Use low for full model to balance speed/accuracy
-        elif model == "gpt-5-mini":
-            reasoning_effort = "minimal"  # Fast processing for mini
-        elif model == "gpt-5-nano":
-            reasoning_effort = "minimal"  # Fastest for nano
-        
-        # Build API parameters
+        # Build API parameters (GPT-4.1 supports temperature and max_tokens)
         api_params = {
             "model": model,
             "messages": messages,
-            "temperature": 0.0,  # Always 0.0 for structured extraction
+            "temperature": temperature,
             "max_tokens": max_tokens,
             "response_format": {"type": "json_object"},
         }
-        
-        # Add GPT-5 specific parameters if available
-        if model.startswith("gpt-5"):
-            api_params["reasoning_effort"] = reasoning_effort
-            api_params["verbosity"] = "low"  # Concise output for faster processing
         
         # Make the API call
         response = await asyncio.wait_for(
@@ -168,7 +152,7 @@ async def make_chat_completion_request(
             file_path=file_path,
             drawing_type=drawing_type,
             model=model,
-            api_type="chat"  # Changed from "responses"
+            api_type="chat"
         )
         
         logger.info(
@@ -194,7 +178,6 @@ def optimize_model_parameters(
 ) -> Dict[str, Any]:
     """
     Determine optimal model parameters based on drawing type and content.
-    Simplified version without Responses API specific parameters.
     """
     content_length = len(raw_content) if raw_content else 0
     
@@ -207,15 +190,14 @@ def optimize_model_parameters(
     # PRIORITY 1: Schedules/specs use appropriate model with sufficient tokens
     if is_schedule:
         model = SCHEDULE_MODEL
-        temperature = 0.0  # Always 0.0 for extraction
-        # Use larger token limit since GPT-5 supports 400K context and 128K output
-        max_tokens = min(128000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
+        temperature = float(os.getenv("LARGE_MODEL_TEMP", str(LARGE_MODEL_TEMP))) if isinstance(LARGE_MODEL_TEMP, (int, float)) else float(os.getenv("LARGE_MODEL_TEMP", "0.2"))
+        max_tokens = min(LARGE_MODEL_MAX_TOKENS, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
         logger.info(f"Using schedule model for {content_length} char document")
     
     # PRIORITY 2: Force mini override for non-schedules
     elif force_mini:
         model = DEFAULT_MODEL
-        temperature = 0.0
+        temperature = float(os.getenv("DEFAULT_MODEL_TEMP", str(DEFAULT_MODEL_TEMP))) if isinstance(DEFAULT_MODEL_TEMP, (int, float)) else float(os.getenv("DEFAULT_MODEL_TEMP", "0.2"))
         max_tokens = DEFAULT_MODEL_MAX_TOKENS
         logger.info(f"Force-mini override active ({content_length} chars)")
     
@@ -223,21 +205,21 @@ def optimize_model_parameters(
     elif content_length < NANO_CHAR_THRESHOLD:
         # Use nano for simple classification and basic extraction
         model = TINY_MODEL if TINY_MODEL else DEFAULT_MODEL
-        temperature = 0.0
+        temperature = float(os.getenv("TINY_MODEL_TEMP", str(TINY_MODEL_TEMP))) if isinstance(TINY_MODEL_TEMP, (int, float)) else float(os.getenv("TINY_MODEL_TEMP", "0.2"))
         max_tokens = TINY_MODEL_MAX_TOKENS if TINY_MODEL else DEFAULT_MODEL_MAX_TOKENS
         logger.info(f"Using nano model for simple extraction ({content_length} chars)")
     
     elif content_length < MINI_CHAR_THRESHOLD:
         # Use mini for structured schedules and repetitive tasks
         model = DEFAULT_MODEL
-        temperature = 0.0
+        temperature = float(os.getenv("DEFAULT_MODEL_TEMP", str(DEFAULT_MODEL_TEMP))) if isinstance(DEFAULT_MODEL_TEMP, (int, float)) else float(os.getenv("DEFAULT_MODEL_TEMP", "0.2"))
         max_tokens = DEFAULT_MODEL_MAX_TOKENS
         logger.info(f"Using mini model for structured extraction ({content_length} chars)")
     
     else:
         # Use full model only for complex reasoning and multi-step tasks
         model = LARGE_DOC_MODEL
-        temperature = 0.0
+        temperature = float(os.getenv("LARGE_MODEL_TEMP", str(LARGE_MODEL_TEMP))) if isinstance(LARGE_MODEL_TEMP, (int, float)) else float(os.getenv("LARGE_MODEL_TEMP", "0.2"))
         max_tokens = LARGE_MODEL_MAX_TOKENS
         logger.info(f"Using full model for complex extraction ({content_length} chars)")
     
@@ -258,7 +240,7 @@ def optimize_model_parameters(
     
     params = {
         "model": model,
-        "temperature": 0.0,  # Always 0.0 for structured extraction
+        "temperature": temperature,
         "max_tokens": max_tokens,
     }
 
@@ -294,9 +276,9 @@ async def call_with_cache(
     # Prepare parameters for cache key
     params = {
         "model": model,
-        "temperature": 0.0,  # Always 0.0 for extraction
+        "temperature": temperature,
         "max_tokens": max_tokens,
-        "api_type": "chat",  # Changed from "responses"
+        "api_type": "chat",
         "instructions": (instructions or ""),
     }
     
@@ -312,7 +294,7 @@ async def call_with_cache(
         client=client,
         input_text=prompt,
         model=model,
-        temperature=0.0,  # Override to 0.0
+        temperature=temperature,
         max_tokens=max_tokens,
         file_path=file_path,
         drawing_type=drawing_type,
@@ -355,7 +337,7 @@ async def process_drawing(
     raw_content: str, drawing_type: str, client: AsyncOpenAI, pdf_path: str = "", titleblock_text: Optional[str] = None
 ) -> str:
     """
-    Process drawing content using AI to convert to structured JSON via the Responses API.
+    Process drawing content using AI to convert to structured JSON via the Chat Completions API.
     """
     if not raw_content:
         raise AIProcessingError("Cannot process empty content")
@@ -387,7 +369,7 @@ async def process_drawing(
         system_message += "\n\nFormat your entire response as a valid JSON object."
 
     logger.info(f"Prompt key used: {drawing_type}_{subtype if subtype else ''}")
-    logger.info(f"API mode: Responses")
+    logger.info(f"API mode: Chat")
 
     # Get optimized model parameters
     params = optimize_model_parameters(drawing_type, raw_content, pdf_path)
