@@ -11,11 +11,11 @@ from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
-# Fixed configuration (proven to work)
-GRID = 3  # 3x3 tiling
-DPI = 600  # High quality
-MODEL = "gpt-5"  # Use GPT-5 Responses API for OCR
-TOKENS_PER_TILE = 1000  # Enough for construction text
+# Optimized configuration for performance and cost
+GRID = int(os.getenv("OCR_GRID_SIZE", "1"))  # Default to no tiling (1x1)
+DPI = int(os.getenv("OCR_DPI", "300"))  # 300 DPI is sufficient for text
+MODEL = os.getenv("OCR_MODEL", "gpt-4o-mini")  # Fast, cheap, accurate enough
+TOKENS_PER_TILE = int(os.getenv("OCR_TOKENS_PER_TILE", "3000"))  # Enough for full page
 OVERLAP_PERCENT = 0.1  # 10% overlap between tiles - proven to prevent text loss at boundaries
 
 
