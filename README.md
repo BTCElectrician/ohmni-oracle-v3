@@ -1,6 +1,3 @@
-Here's an updated README that reflects the current codebase (Chat Completions for extraction, OCR with tiling, improved title-block logic, JSON repair toggles, and normalization pipeline). Replace your README.md with the following:
-
-```md
 # Ohmni Oracle v3 — Construction Drawing Processor
 
 <div align="center">
