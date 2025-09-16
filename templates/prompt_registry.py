@@ -136,6 +136,28 @@ _registry.register(
     """,
 )
 
+_registry.register(
+    "METADATA_REPAIR",
+    """Extract these fields from the title block text. Look for these patterns:
+    
+    - drawing_number/sheet_number: Like "E5.00", "A2.2" (usually after "SHEET")
+    - project_name: The main project title (NOT the job number) - often the largest text
+    - job_no/job_number: Numeric code like "24-0329" (after "JOB NO" or "JOB#")  
+    - revision: Single letter/number like "A", "1", "S" (after "REV" or "REVISION")
+    - date: Any date format
+    - project_address: Full address if present
+    
+    Common patterns:
+    - "VERIDIAN - BLOCK 1" → project_name: "VERIDIAN - BLOCK 1"
+    - "JOB NO: 24-0329" → job_no: "24-0329"
+    - "SHEET NUMBER: E4.05" → drawing_number: "E4.05"
+    
+    Return JSON with structure:
+    {"DRAWING_METADATA": {...extracted fields...}}
+    
+    Use null for missing fields. Focus on accuracy over completeness."""
+)
+
 
 def get_registry() -> PromptRegistry:
     """Get the global prompt registry instance."""

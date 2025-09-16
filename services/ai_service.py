@@ -73,6 +73,13 @@ Requirements:
 - Return ONLY the JSON.
 """
 
+# Focused instructions for metadata repair - reduces tokens and improves accuracy
+METADATA_REPAIR_INSTRUCTIONS = """
+Extract drawing metadata from title block text. Return JSON with one key "DRAWING_METADATA" containing:
+drawing_number, title, date, revision, project_name, job_number, scale, discipline, drawn_by, checked_by.
+Use null for missing fields.
+"""
+
 
 
 def _strip_json_fences(s: str) -> str:
@@ -81,6 +88,122 @@ def _strip_json_fences(s: str) -> str:
         return s
     m = re.match(r"^```(?:json)?\s*(.*)```$", s.strip(), re.DOTALL | re.IGNORECASE)
     return m.group(1).strip() if m else s
+
+
+def _looks_like_sheet_no(s: str) -> bool:
+    """Check if string looks like a sheet number (e.g., E5.00)."""
+    try:
+        return bool(re.match(r"^[A-Z]{1,3}\d{1,3}(?:\.\d{1,2})?$", str(s).strip(), re.I))
+    except Exception:
+        return False
+
+
+def _parse_sheet_from_filename(pdf_path: Optional[str]) -> Optional[str]:
+    """Extract sheet number from filename."""
+    if not pdf_path:
+        return None
+    base = os.path.basename(pdf_path)
+    m = re.match(r"^([A-Za-z]{1,3}\d{1,3}(?:\.\d{1,2})?)", base)
+    return m.group(1) if m else None
+
+
+def _extract_project_name_from_titleblock(titleblock_text: str) -> Optional[str]:
+    """Extract project name from title block text."""
+    for line in titleblock_text.splitlines():
+        line_clean = line.strip()
+        m = re.search(r"PROJECT(?:\s+NAME|\s+TITLE)?\s*[:\-]\s*(.+)$", line_clean, re.I)
+        if m:
+            value = m.group(1).strip().strip(":").strip("-")
+            if value:
+                return value
+    return None
+
+
+def _extract_revision_from_titleblock(titleblock_text: str) -> Optional[str]:
+    """Extract revision from title block text."""
+    # Try direct "Rev", "Revision" marks
+    m = re.search(r"\bRev(?:ision)?\.?\s*[:\-]?\s*([A-Za-z0-9]+)\b", titleblock_text, re.I)
+    if m:
+        return m.group(1).strip()
+    # Try "3 IFC", "B IFC" format
+    m = re.search(r"\b([A-Za-z0-9]+)\s+IFC\b", titleblock_text, re.I)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
+def _fill_critical_metadata_fallback(
+    metadata: Dict[str, Any],
+    pdf_path: Optional[str],
+    titleblock_text: Optional[str],
+) -> Dict[str, Any]:
+    """Non-destructive fixes for common misplacements/missing fields."""
+    metadata = metadata or {}
+    sheet_number = metadata.get("sheet_number")
+    drawing_number = metadata.get("drawing_number")
+    revision = metadata.get("revision")
+    project_name = metadata.get("project_name")
+
+    # 1) Ensure sheet_number at least from filename
+    if not sheet_number:
+        candidate = _parse_sheet_from_filename(pdf_path)
+        if candidate:
+            sheet_number = candidate
+            metadata["sheet_number"] = candidate
+            logger.info(f"Filled sheet_number from filename: {candidate}")
+
+    # 2) Fill drawing_number if missing using sheet_number or filename
+    if not drawing_number:
+        if sheet_number:
+            metadata["drawing_number"] = sheet_number
+            logger.info("Filled drawing_number from sheet_number")
+        else:
+            candidate = _parse_sheet_from_filename(pdf_path)
+            if candidate:
+                metadata["drawing_number"] = candidate
+                logger.info(f"Filled drawing_number from filename: {candidate}")
+
+    # 3) If revision looks like a sheet number, clear it (it's wrong)
+    if revision and (_looks_like_sheet_no(revision) or (sheet_number and revision == sheet_number)):
+        logger.info(f"Clearing incorrect revision value that matches sheet: {revision}")
+        metadata["revision"] = None
+
+    # 4) If revision still missing, try pulling from title block
+    if (not metadata.get("revision")) and titleblock_text:
+        rev = _extract_revision_from_titleblock(titleblock_text)
+        if rev:
+            metadata["revision"] = rev
+            logger.info(f"Revision extracted from title block: {rev}")
+
+    # 5) If project_name missing, try to extract from title block
+    if not project_name and titleblock_text:
+        pname = _extract_project_name_from_titleblock(titleblock_text)
+        if pname:
+            metadata["project_name"] = pname
+            logger.info(f"Project name extracted from title block: {pname}")
+
+    # Project name fallback hierarchy
+    if not metadata.get("project_name"):
+        # Try 1: Use project address street name if available
+        if metadata.get("project_address"):
+            street_match = re.search(r'\d+\s+([A-Z\s]+)(?:\s+(?:BLVD|DR|ST|AVE|RD|WAY|LN|CT|PL))', 
+                                    metadata["project_address"], re.IGNORECASE)
+            if street_match:
+                street_name = street_match.group(1).strip().title()
+                job_no = metadata.get("job_no") or metadata.get("job_number") or ""
+                metadata["project_name"] = f"{street_name} {job_no}".strip()
+                metadata["project_name_source"] = "derived_from_address"
+                logger.info(f"Derived project name from address: {metadata['project_name']}")
+        
+        # Try 2: Use job number as last resort
+        if not metadata.get("project_name"):
+            job_no = metadata.get("job_no") or metadata.get("job_number")
+            if job_no:
+                metadata["project_name"] = f"Project {job_no}"
+                metadata["project_name_source"] = "derived_from_job_no"
+                logger.info(f"Used job number as project name: {metadata['project_name']}")
+
+    return metadata
 # =====================================================
 
 
@@ -223,17 +346,31 @@ def optimize_model_parameters(
         max_tokens = LARGE_MODEL_MAX_TOKENS
         logger.info(f"Using full model for complex extraction ({content_length} chars)")
     
-    # Token policy: keep large outputs reasonable to avoid timeouts
-    if model in [LARGE_DOC_MODEL, SCHEDULE_MODEL]:
+    # Check if this is a specification document first
+    is_specification = (
+        "spec" in drawing_type.lower() or 
+        "specification" in drawing_type.lower() or
+        "spec" in pdf_path.lower() or 
+        "specification" in pdf_path.lower()
+    )
+    
+    # Special handling for specification documents
+    if is_specification:
+        spec_max_tokens = int(os.getenv("SPEC_MAX_TOKENS", "16384"))
+        max_tokens = min(max_tokens, spec_max_tokens)
+        logger.info(f"Specification document detected - limiting to {max_tokens} tokens")
+    
+    # Token policy for NON-specification documents: keep large outputs reasonable to avoid timeouts
+    elif model in [LARGE_DOC_MODEL, SCHEDULE_MODEL]:
         if content_length > 35000:
-            max_tokens = min(6000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
+            max_tokens = min(12000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
             logger.info(f"Capping max_tokens to {max_tokens} for very large document")
         elif content_length > 25000:
-            max_tokens = min(8000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
+            max_tokens = min(14000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
             logger.info(f"Setting max_tokens to {max_tokens} for large document")
         elif content_length > 15000:
-            max_tokens = min(10000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
-        # else: use default max_tokens
+            max_tokens = min(15000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
+        # else: use default max_tokens (16384)
     
     # Ensure we don't exceed provider limits
     max_tokens = min(max_tokens, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
@@ -399,25 +536,43 @@ async def process_drawing(
                 content = _strip_json_fences(content)
                 parsed = json.loads(content)
                 
-                # Replace the metadata repair block with:
+                # Apply fallback reconciliation first (fixes common misplacements)
+                tb_len = len(titleblock_text.strip()) if titleblock_text else 0
+                parsed["DRAWING_METADATA"] = _fill_critical_metadata_fallback(
+                    parsed.get("DRAWING_METADATA") or {},
+                    pdf_path,
+                    titleblock_text
+                )
+
+                # Metadata repair (LLM) with clearer logging
                 if not titleblock_text:
-                    logger.info("Metadata repair SKIPPED: no title block text extracted")
+                    logger.warning(f"NO TITLE BLOCK for {pdf_path} - skipping metadata repair")
                 elif get_enable_metadata_repair():
+                    logger.info(f"Running metadata repair (title block chars={tb_len})")
                     try:
                         repaired_metadata = await repair_metadata(titleblock_text, client, pdf_path)
                         if repaired_metadata:
-                            # Update metadata in the parsed content
-                            if "DRAWING_METADATA" in parsed:
+                            if "DRAWING_METADATA" in parsed and isinstance(parsed["DRAWING_METADATA"], dict):
                                 parsed["DRAWING_METADATA"].update(repaired_metadata)
                             else:
                                 parsed["DRAWING_METADATA"] = repaired_metadata
-                            # Convert back to string
-                            content = json.dumps(parsed)
                             logger.info("Successfully repaired metadata from title block")
+                        else:
+                            logger.info("Metadata repair returned empty dict (no changes)")
                     except Exception as e:
                         logger.warning(f"Metadata repair failed: {str(e)}")
                 else:
                     logger.warning("Metadata repair DISABLED by ENABLE_METADATA_REPAIR=false (skipping)")
+
+                # Run fallback reconciliation again after repair to enforce consistency
+                parsed["DRAWING_METADATA"] = _fill_critical_metadata_fallback(
+                    parsed.get("DRAWING_METADATA") or {},
+                    pdf_path,
+                    titleblock_text
+                )
+
+                # Re-serialize content after possible metadata updates
+                content = json.dumps(parsed)
                 
                 # Check for potential truncation
                 output_length = len(content)
@@ -486,54 +641,95 @@ async def repair_metadata(
     pdf_path: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Repair metadata by extracting it from title block text using AI.
-    Also updated to support GPT-5 when enabled.
+    Extract metadata from title block text using focused AI prompt.
+    Returns empty dict on failure to maintain pipeline resilience.
+    
+    Args:
+        titleblock_text: Extracted text from title block region
+        client: OpenAI client for API calls
+        pdf_path: Optional path for logging context
+        
+    Returns:
+        Dictionary of metadata fields or empty dict if repair fails
     """
-    # ADD THIS HARD GATE AT THE VERY BEGINNING
     from config.settings import get_enable_metadata_repair
+    
+    # Check if feature is enabled
     if not get_enable_metadata_repair():
-        logger.warning("Metadata repair DISABLED by ENABLE_METADATA_REPAIR=false")
+        logger.debug("Metadata repair disabled by configuration")
         return {}
     
-    if not titleblock_text:
-        logger.warning("No title block text provided for metadata repair")
+    # Check if we have title block text to work with
+    if not titleblock_text or len(titleblock_text.strip()) < 10:
+        logger.debug("No title block text available for metadata repair")
         return {}
 
-    from templates.prompt_registry import get_registry
-
-    registry = get_registry()
-    system_message = registry.get("METADATA_REPAIR")
-
     try:
-        # Determine which model to use for metadata repair
+        # Track attempt for visibility in performance report
+        from utils.performance_utils import get_tracker
+        tracker = get_tracker()
+        tracker.add_metric(
+            "metadata_repair_attempt",
+            os.path.basename(pdf_path) if pdf_path else "unknown",
+            "metadata_repair",
+            1.0
+        )
+
+        # Log repair attempt
         repair_model = TINY_MODEL if TINY_MODEL else DEFAULT_MODEL
+        logger.info(f"Attempting metadata repair with {repair_model}")
         
+        # Get the specialized metadata repair prompt from registry
+        from templates.prompt_registry import get_registry
+        registry = get_registry()
+        metadata_repair_prompt = registry._prompts.get("METADATA_REPAIR", METADATA_REPAIR_INSTRUCTIONS)
+        
+        # Make focused API call for metadata extraction
         content = await call_with_cache(
             client=client,
             messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": titleblock_text},
+                {"role": "system", "content": metadata_repair_prompt},
+                {"role": "user", "content": f"Extract metadata from:\n{titleblock_text}"},
             ],
             model=repair_model,
-            temperature=1.0,
-            max_tokens=min(1000, TINY_MODEL_MAX_TOKENS if TINY_MODEL else DEFAULT_MODEL_MAX_TOKENS),
+            temperature=0.0,  # Deterministic for consistent extraction
+            max_tokens=800,   # Tight limit - metadata only needs ~200-300 tokens
             file_path=pdf_path,
             drawing_type="metadata_repair",
+            instructions=metadata_repair_prompt,
         )
 
-        try:
-            with time_operation_context("json_parsing", file_path=None, drawing_type="metadata_repair"):
-                content = _strip_json_fences(content)
-                parsed = json.loads(content)
-                if "DRAWING_METADATA" not in parsed:
-                    logger.warning("No DRAWING_METADATA found in repair response")
-                    return {}
-                return parsed["DRAWING_METADATA"]
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON validation error in metadata repair: {str(e)}")
-            logger.error(f"Invalid JSON snippet: {content[:500]}...")
-            raise JSONValidationError(f"Invalid JSON output: {str(e)}")
-
+        # Parse and validate response
+        content = _strip_json_fences(content)
+        parsed = json.loads(content)
+        metadata = parsed.get("DRAWING_METADATA", {})
+        
+        # Validate we got actual metadata
+        if not isinstance(metadata, dict):
+            logger.warning("Invalid metadata structure in repair response")
+            return {}
+        
+        # Log success with key fields for monitoring
+        if metadata:
+            drawing_num = metadata.get('drawing_number', 'N/A')
+            project = metadata.get('project_name', 'N/A')
+            logger.info(f"✅ Metadata repaired: Drawing {drawing_num}, Project: {project}")
+            
+            # Track success metrics
+            from utils.performance_utils import get_tracker
+            tracker = get_tracker()
+            tracker.add_metric(
+                "metadata_repair_success",
+                os.path.basename(pdf_path) if pdf_path else "unknown",
+                "metadata_repair",
+                1.0
+            )
+        
+        return metadata
+        
+    except json.JSONDecodeError as e:
+        logger.debug(f"JSON parse error in metadata repair: {str(e)}")
+        return {}
     except Exception as e:
-        logger.error(f"Error in metadata repair: {str(e)}")
-        raise AIProcessingError(f"Error in metadata repair: {str(e)}")
+        logger.debug(f"Metadata repair failed: {str(e)}")
+        return {}

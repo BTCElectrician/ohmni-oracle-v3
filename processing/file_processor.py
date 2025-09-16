@@ -249,15 +249,24 @@ class FileProcessingPipeline:
         expected_chars_per_page = expected_per_page_ranges.get(drawing_type.split('_')[0], "varies by drawing type")
         
         # Calculate pages for per-page analysis
-        try:
-            import pymupdf as fitz
-            with fitz.open(self.pdf_path) as doc:
-                page_count = len(doc)
-                chars_per_page = current_chars / page_count if page_count > 0 else current_chars
-        except Exception as e:
-            page_count = 1
-            chars_per_page = current_chars
-            self.logger.warning(f"Could not read PDF for page count: {e}")
+        extraction_meta = extraction_result.metadata or {}
+        meta_page_count = extraction_meta.get("page_count")
+        
+        if isinstance(meta_page_count, int) and meta_page_count > 0:
+            # Use page count from extraction metadata (no need to reopen PDF)
+            page_count = meta_page_count
+            chars_per_page = current_chars / page_count if page_count > 0 else current_chars
+        else:
+            # Fallback: only open PDF if metadata is missing
+            try:
+                import pymupdf as fitz
+                with fitz.open(self.pdf_path) as doc:
+                    page_count = len(doc)
+                    chars_per_page = current_chars / page_count if page_count > 0 else current_chars
+            except Exception as e:
+                page_count = 1
+                chars_per_page = current_chars
+                self.logger.warning(f"Could not read PDF for page count: {e}")
         
         # Get intelligent OCR decision
         from services.ocr_service import should_perform_ocr
@@ -496,14 +505,27 @@ class FileProcessingPipeline:
                 
                 # Parse JSON response
                 self.logger.info(f"Attempting to parse JSON response (length: {len(structured_json_str)} chars)...")
+                
+                # Determine if this drawing type needs JSON repair
                 needs_repair = (
                     "panel" in (self.processing_state.get("subtype") or "").lower() or
                     "mechanical" in processing_type.lower()
                 )
-                # Gate JSON repair behind metadata repair setting
-                json_repair_enabled = get_enable_metadata_repair()
-                if needs_repair and not json_repair_enabled:
-                    self.logger.warning("JSON repair DISABLED by ENABLE_METADATA_REPAIR=false (skipping)")
+
+                # Check for dedicated JSON repair toggle first
+                json_repair_env = os.getenv("ENABLE_JSON_REPAIR")
+                if json_repair_env is not None:
+                    # Explicit JSON repair setting takes precedence
+                    json_repair_enabled = json_repair_env.lower() == "true"
+                    if needs_repair and not json_repair_enabled:
+                        self.logger.debug("JSON repair disabled by ENABLE_JSON_REPAIR=false")
+                else:
+                    # Fallback to metadata repair setting for backward compatibility
+                    json_repair_enabled = get_enable_metadata_repair()
+                    if needs_repair and not json_repair_enabled:
+                        self.logger.debug("JSON repair disabled by ENABLE_METADATA_REPAIR=false")
+
+                # Parse with optional repair
                 parsed_json = parse_json_safely(
                     structured_json_str, 
                     repair=(needs_repair and json_repair_enabled)

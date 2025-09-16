@@ -17,6 +17,16 @@ if not OPENAI_API_KEY:
 # Logging Configuration
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
+# Pipeline-specific log level control
+PIPELINE_LOG_LEVEL = os.getenv("PIPELINE_LOG_LEVEL", "").upper()
+
+def _resolve_pipeline_level(default=logging.WARNING):
+    """Resolve pipeline logging level from environment or defaults."""
+    if PIPELINE_LOG_LEVEL in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+        return getattr(logging, PIPELINE_LOG_LEVEL, default)
+    # If DEBUG_MODE is true, default to INFO for pipeline modules
+    return logging.INFO if DEBUG_MODE else default
+
 # Processing Configuration
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "10"))
 API_RATE_LIMIT = int(os.getenv("API_RATE_LIMIT", "60"))
@@ -135,9 +145,14 @@ def get_all_settings() -> Dict[str, Any]:
         "OCR_MAX_PAGES": OCR_MAX_PAGES,
     }
 
-# Reduce logging noise from verbose modules
-logging.getLogger("services.ai_service").setLevel(logging.WARNING)
-logging.getLogger("utils.ai_cache").setLevel(logging.WARNING) 
+# Apply dynamic levels to pipeline modules
+for name in [
+    "services.ai_service",
+    "utils.ai_cache",
+    "services.extraction_service",
+    "processing.file_processor",
+]:
+    logging.getLogger(name).setLevel(_resolve_pipeline_level())
+
+# Keep httpx quiet
 logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("services.extraction_service").setLevel(logging.WARNING)
-logging.getLogger("processing.file_processor").setLevel(logging.WARNING)
