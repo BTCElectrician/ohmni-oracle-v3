@@ -1,430 +1,301 @@
-# Ohmni Oracle - Construction Drawing Processor
+Here's an updated README that reflects the current codebase (Chat Completions for extraction, OCR with tiling, improved title-block logic, JSON repair toggles, and normalization pipeline). Replace your README.md with the following:
+
+```md
+# Ohmni Oracle v3 — Construction Drawing Processor
 
 <div align="center">
   <img src="assets/github-owl.png" alt="Ohmni Oracle Logo" width="400" height="200">
   <br>
-  <em>AI-Powered Construction Drawing Processing & Analysis</em>
+  <em>AI-Powered Construction Drawing Extraction & Normalization</em>
 </div>
 
 ## Overview
 
-The Ohmni Oracle is a sophisticated Python-based backend system designed to process PDF construction drawings. It leverages Artificial Intelligence (specifically OpenAI's GPT models) to extract, structure, and normalize information from various types of construction documents, including architectural, electrical, mechanical, and plumbing drawings. The system is built for asynchronous, batch processing and includes features for performance monitoring, AI response caching, and robust error handling.
+Ohmni Oracle v3 processes PDF construction drawings at scale. It extracts text and tables via PyMuPDF, augments content via OCR when needed, and converts everything into structured JSON using OpenAI’s Chat Completions API. The pipeline includes JSON repair, field normalization for schedules, metadata repair from title blocks, room template generation, caching, and detailed performance tracking.
 
-The primary goal is to convert unstructured data from PDF drawings into structured JSON output, making it usable for downstream analysis, data integration, or other construction technology applications.
+Core disciplines supported:
+- Architectural
+- Electrical (incl. panel schedules)
+- Mechanical (incl. equipment schedules)
+- Plumbing (incl. fixture/equipment schedules)
+- General/specification documents
 
 ## Features
 
-> **💡 Performance Tip**: For optimal performance, ensure `ENABLE_TABLE_EXTRACTION=false` and `ENABLE_AI_CACHE=true` in your `.env` file. See [Performance Configuration](#-performance-configuration) below for details.
+- Asynchronous batch processing with worker queue and progress bars (tqdm)
+- Intelligent OCR fallback with memory-safe tiling and 10% overlap
+- Chat Completions API with strict JSON-only output
+- Robust metadata repair from title blocks with non-destructive fallback filling
+- JSON parsing with optional repair for tricky schedules
+- Discipline-specific normalization (panel, mechanical, plumbing)
+- Room file generation for Architectural floor plans
+- AI response caching for 20–30x faster repeated runs
+- Performance metrics and slowdown detection
+- Clear status files for every outcome
 
-### Core Processing
-*   **Asynchronous PDF Processing:** Efficiently handles multiple PDF files concurrently using Python's `asyncio`.
-*   **Batch Processing:** Processes entire "job sites" (folders of PDFs) with configurable batch sizes and concurrency limits.
-*   **Drawing Type Detection:** Automatically identifies the discipline of a drawing (Architectural, Electrical, Mechanical, Plumbing, Fire Alarm, Low Voltage, General, etc.) based on filename conventions.
-*   **Content Extraction:**
-    *   Utilizes PyMuPDF for robust text and table extraction from PDF documents.
-    *   Specialized extractors for different disciplines (Architectural, Electrical, Mechanical, Plumbing, Fire Alarm) with tailored logic to enhance relevant data (e.g., room information for Architectural, panel details for Electrical, low voltage systems for Fire Alarm).
-    *   Handles unreadable or empty PDFs gracefully by generating status files.
-*   **AI-Powered Data Extraction:**
-    *   Integrates with OpenAI's API (configurable models, e.g., GPT-4o, GPT-4o-mini).
-    *   Dynamic model selection based on content length and drawing type (e.g., using more powerful models for large documents or specific schedule types).
-    *   Centralized prompt management using a registry system that currently routes all requests to a comprehensive "GENERAL" prompt designed for various construction drawing types.
-*   **Data Structuring & Normalization:**
-    *   Transforms raw AI responses into structured JSON.
-    *   Includes JSON repair capabilities, particularly for complex structures like panel schedules that AI might occasionally malform.
-    *   Provides normalization routines to standardize field names and formats for:
-        *   Electrical Panel Schedules
-        *   Mechanical Equipment Schedules
-        *   Plumbing Fixture/Equipment Schedules
-        *   Fire Alarm and Low Voltage Systems
-    *   Uses Pydantic schemas for validating extracted metadata (e.g., PDF properties, drawing metadata).
+## How It Works
 
-### Job & Workflow Management
-*   **Prioritized Queue Processing:** Files are queued for processing based on drawing discipline priority (e.g., Architectural first) and then by file size (smallest first within each discipline) to optimize workflow.
-*   **Concurrency Control:** Manages the number of concurrent PDF processing tasks and API calls to respect rate limits and system resources.
-*   **Worker-Based Architecture:** Employs asynchronous workers to process files from the queue.
+1) Extraction (services/extraction_service.py)
+- Uses PyMuPDF for text and optional table extraction per page
+- Specialized extractors:
+  - ArchitecturalExtractor: highlights room info; prioritizes relevant tables
+  - ElectricalExtractor: marks/prefers panel schedules; enriches panel metadata
+  - MechanicalExtractor: highlights equipment schedules
+  - PlumbingExtractor: highlights fixtures/equipment/piping schedules
+- Title block detection on page 1 with rotation handling, scoring, and truncation checks
+- Configurable table extraction (ENABLE_TABLE_EXTRACTION)
+- Produces ExtractionResult (raw_text, tables, metadata, titleblock_text, has_content)
 
-### Configuration & Extensibility
-*   **Environment-Driven Configuration:** All major settings are controlled via environment variables (loaded from an `.env` file).
-*   **Flexible Prompt System:** Uses a registry-based approach with discipline-specific decorators for future extension, though currently defaults to a single general prompt.
-*   **Modular Services:** Key functionalities like AI interaction, PDF extraction, data normalization, and storage are encapsulated in separate services.
+2) OCR (services/ocr_service.py)
+- Triggered when extracted text density is low:
+  - per-page character threshold (OCR_THRESHOLD, default 1500 chars/page)
+  - minimal total text heuristic
+- Memory-safe tiling with 10% overlap (GRID x GRID, default 1x1) at configurable DPI (default 300)
+- Uses OpenAI Responses API vision for OCR tiles (default model gpt-4o-mini)
+- Processes up to OCR_MAX_PAGES pages (default 2)
+- Appends OCR text to the extraction result and tracks metrics
 
-### Output & Reporting
-*   **Structured JSON Output:** Saves processed data as well-organized JSON files, typically one per input PDF.
-*   **Status & Error Reporting:** Generates distinct JSON files for successfully processed documents, unreadable documents, or documents that failed during extraction or AI processing.
-*   **Room Generation:** For architectural floor plans, it can generate `_a_rooms_details.json` and `_e_rooms_details.json` files based on predefined structures and extracted room data.
-*   **Comprehensive Logging:**
-    *   Structured logging with context.
-    *   Logs to both console and timestamped files within the output directory.
-    *   Sensitive data in logs (like API keys) is redacted.
-*   **Performance Monitoring:**
-    *   Tracks duration of key operations (extraction, AI processing, API calls, normalization, etc.).
-    *   Saves detailed performance metrics to JSON files for historical analysis and comparison.
-    *   Reports average times, slowest operations, and API call statistics.
-    *   Includes functionality to detect significant API slowdowns compared to historical performance.
+3) AI Processing (services/ai_service.py)
+- Single, comprehensive “GENERAL” prompt via PromptRegistry (templates/prompt_registry.py)
+  - Registry always returns the GENERAL prompt at runtime
+- Chat Completions API with response_format={"type": "json_object"}
+- Dynamic model selection based on content size and document type
+  - DEFAULT_MODEL (e.g., gpt-5-mini), LARGE_DOC_MODEL (e.g., gpt-5), SCHEDULE_MODEL (e.g., gpt-5), optional TINY_MODEL
+  - NANO_CHAR_THRESHOLD and MINI_CHAR_THRESHOLD determine model tiers
+  - Force mini override via FORCE_MINI_MODEL=true
+  - Specification docs get token constraints (SPEC_MAX_TOKENS)
+- AI cache for responses (ENABLE_AI_CACHE=true strongly recommended)
 
-### Utilities
-*   **AI Response Caching:** Optionally caches AI responses to disk to avoid redundant API calls for identical inputs, saving costs and time. Cache TTL is configurable.
-*   **File System Utilities:** Includes helpers for traversing job folders.
-*   **Custom Exceptions:** Defines specific exceptions for better error management.
+4) JSON Validation & Repair
+- Strict JSON mode (response_format) + safe parse (utils/json_utils.py)
+- Optional repair for complex schedules (ENABLE_JSON_REPAIR) using heuristics:
+  - Fixes common bracket/comma/key quoting issues and truncated tails
+- Mechanical drawings may perform a second AI attempt when MECH_SECOND_PASS=true
+
+5) Metadata Repair
+- Non-destructive fallback fill (_fill_critical_metadata_fallback)
+  - Fill sheet/drawing numbers from filename
+  - Clear bogus revision values
+  - Extract revision and project_name from title block if present
+- Optional focused repair pass (ENABLE_METADATA_REPAIR=true)
+  - Runs a small model with a targeted metadata prompt
+  - Merges fields into DRAWING_METADATA
+
+6) Normalization (services/normalizers.py)
+- Electrical: normalize panel schedule fields and validate structure
+- Mechanical: re-group equipment into typed categories (fans, pumps, AHUs, etc.)
+- Plumbing: normalize fixtures, water heaters, and piping fields
+
+7) Output & Templates
+- Saves structured JSON to <output>/<Type>/<file>_structured.json
+- Architectural floor plans trigger room templates (templates/room_templates.py)
+  - Generates <file>_a_rooms_details.json and <file>_e_rooms_details.json
+- If unreadable/no content, saved status explains why and processing stops early
+
+## Output and Status Files
+
+- Success: <output>/<Type>/<name>_structured.json (success=true)
+- Unreadable: <output>/<Type>/<name>_structured.json (status="skipped_unreadable", success=true)
+- Extraction failed: <output>/<Type>/<name>_error.json (status="extraction_failed")
+- AI/JSON failed: <output>/<Type>/<name>_error.json (status="ai_processing_failed"), may save a raw response file
+- Save failed: <output>/<Type>/<name>_error.json (status="json_save_failed")
+- Unexpected: <output>/<Type>/<name>_error.json (status="unexpected_error")
+- Room files (Architectural): <output>/Architectural/<name>_a_rooms_details.json and _e_rooms_details.json
+- Logs: <output>/logs/...; Performance metrics: <output>/metrics/...
+
+Status values are defined in processing/file_processor.py (ProcessingStatus enum).
 
 ## Project Structure
 
-```
-/
-├── config/                 # Application settings and configuration loading
-│   ├── settings.py         # Defines and loads all environment variables
-├── docs/                   # Documentation and guides
-│   ├── PERFORMANCE.md      # Performance analysis and optimization
-│   ├── TROUBLESHOOTING.md  # Common issues and solutions
-│   └── *.md               # Other technical documentation
-├── processing/             # Core processing logic
-│   ├── file_processor.py   # Logic for processing a single PDF file
-│   └── job_processor.py    # Orchestrates processing of a whole job/folder
-├── schemas/                # Pydantic models for data validation
-│   └── metadata.py         # Schemas for drawing and extraction metadata
-├── services/               # Business logic services
-│   ├── ai_service.py       # Handles interaction with AI models (OpenAI)
-│   ├── extraction_service.py # PDF content extraction logic
-│   ├── normalizers.py      # Data normalization routines
-│   └── storage_service.py  # Saving processed data
-├── templates/              # Prompts and output JSON structures
-│   ├── prompts/            # AI prompt definitions for various drawing types
-│   │   └── __init__.py     # Empty init file - decorators fire when modules imported
-│   ├── base_templates.py   # Base prompt structures
-│   ├── prompt_registry.py  # Central registry for managing and retrieving prompts
-│   ├── prompt_templates.py # Main interface for accessing prompts
-│   └── room_templates.py   # Logic for generating room-specific JSON files
-├── utils/                  # Utility modules
-│   ├── exceptions/         # Custom exception classes
-│   ├── ai_cache.py         # AI response caching
-│   ├── drawing_utils.py    # Drawing type detection
-│   ├── file_utils.py       # File system operations
-│   ├── json_utils.py       # JSON parsing and repair utilities
-│   ├── logging_utils.py    # Logging setup and structured logging
-│   ├── performance_utils.py # Performance tracking and reporting
-│   └── security.py         # Security-related utilities (e.g., log sanitization)
-├── .env.example            # Example environment file
-├── main.py                 # Main entry point of the application
-├── requirements.txt        # Python dependencies
-├── pyproject.toml          # Project metadata and tool configuration (Ruff)
-└── setup.cfg               # Configuration for tools like MyPy
-```
-
-### 🗂️ Folder Cheat-Sheet
-| Path | What lives here | Typical changes |
-|------|-----------------|-----------------|
-| config | Runtime settings and environment loaders | Adjusted when adding or deprecating configuration options |
-| processing | Job orchestration and file-processing pipelines | Modified when changing workflow logic or concurrency behavior |
-| schemas | Pydantic data models for validation | Updated when JSON structures or metadata fields evolve |
-| services | Business logic modules for AI, extraction, normalization, storage | Edited when enhancing service capabilities or adding new services |
-| templates | Prompt text, room structures, and prompt registry code | Tweaked when refining AI prompts or output structures |
-| utils | Shared helper utilities, logging, performance, security | Extended when introducing new common functions or improving tooling |
-
-**Usage**: Add a new row whenever you create or remove a top-level directory. Update the descriptions if a folder's role changes or is relocated.
-
-## Prerequisites
-
-*   Python 3.11 or higher
-*   Access to an OpenAI API key
+- config/
+  - settings.py .............. Environment-driven configuration
+- processing/
+  - file_processor.py ........ Orchestrates the per-file pipeline
+  - job_processor.py ......... Manages queue, workers, and progress
+- services/
+  - extraction_service.py .... PDF text/tables extraction + discipline enhancers + title block
+  - ai_service.py ............ Chat Completions integration, model routing, metadata repair
+  - normalizers.py ........... Field normalization for panel/mech/plumbing
+  - storage_service.py ....... Async JSON/text/binary save/read with date handling
+  - ocr_service.py ........... OCR tiling via Responses API vision; per-page threshold trigger
+- templates/
+  - prompt_registry.py ....... Single-source prompt registry (GENERAL prompt runtime)
+  - room_templates.py ........ Generates A/E room details JSONs
+  - a_rooms_template.json .... Base template for architectural rooms
+  - e_rooms_template.json .... Base template for electrical rooms
+- utils/
+  - ai_cache.py .............. Disk cache for AI responses
+  - drawing_utils.py ......... Type/subtype detection from filenames
+  - json_utils.py ............ JSON parsing and repair helpers
+  - file_utils.py ............ Folder traversal
+  - logging_utils.py ......... Logging configuration
+  - performance_utils.py ..... Metrics aggregation and reporting
+  - exceptions/ .............. Custom exception definitions
+- main.py .................... Entry point (async)
+- ohmni ...................... Convenience CLI wrapper (bash)
+- Makefile ................... Dev workflow (install, run, test, lint)
 
 ## Installation
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/BTCElectrician/ohmni-oracle.git
-    cd ohmni-oracle
-    ```
+Prerequisites
+- Python 3.11+
+- OpenAI API key
 
-2.  **Create and activate a virtual environment (recommended):**
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
-    ```
-
-3.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-4.  **Set up environment variables:**
-    *   Copy the example environment file:
-        ```bash
-        cp .env.example .env
-        ```
-    *   Edit the `.env` file and add your `OPENAI_API_KEY` and any other custom configurations.
-        ```dotenv
-        OPENAI_API_KEY=your_openai_api_key_here
-        # Other settings as needed, see .env.example for all options
-        ```
-    *   **⚠️ CRITICAL**: Ensure these performance settings are configured:
-        ```dotenv
-        ENABLE_TABLE_EXTRACTION=false  # Prevents 27x extraction slowdown
-        ENABLE_AI_CACHE=true           # Enables 28-38x performance improvement
-        AI_CACHE_TTL_HOURS=24         # Cache time-to-live
-        ```
-
-## Configuration
-
-The application is configured primarily through environment variables defined in the `.env` file and loaded by `config/settings.py`.
-
-## ⚡ Performance Configuration
-
-### Critical Settings (MUST HAVE in .env)
+Setup
 ```bash
-# REQUIRED - Prevents 27x slowdown in extraction
-ENABLE_TABLE_EXTRACTION=false  
+git clone https://github.com/BTCElectrician/ohmni-oracle.git
+cd ohmni-oracle-v3
 
-# REQUIRED - Enables caching (28-38x performance difference)
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+pip install -r requirements.txt
+
+cp .env.example .env
+# Edit .env and set OPENAI_API_KEY plus recommended settings below
+```
+
+## Recommended .env Settings
+
+Minimum
+```dotenv
+OPENAI_API_KEY=your_openai_api_key
+LOG_LEVEL=INFO
+```
+
+Performance and stability
+```dotenv
+# Strongly recommended
 ENABLE_AI_CACHE=true
 AI_CACHE_TTL_HOURS=24
 
-# OPTIONAL - Trade speed for potential accuracy
-FORCE_MINI_MODEL=false  # true = 29% faster uncached processing
+# Extraction performance (disable for max speed; enables for richer tables)
+ENABLE_TABLE_EXTRACTION=false
+
+# OCR
+OCR_ENABLED=true
+OCR_THRESHOLD=1500         # chars per page
+OCR_MAX_PAGES=2
+OCR_GRID_SIZE=1            # tiling grid (1=off)
+OCR_DPI=300
+OCR_MODEL=gpt-4o-mini
+OCR_TOKENS_PER_TILE=3000
+
+# AI model routing (text → Chat Completions)
+DEFAULT_MODEL=gpt-5-mini
+LARGE_DOC_MODEL=gpt-5
+SCHEDULE_MODEL=gpt-5
+TINY_MODEL=                 # optional (e.g., gpt-5-nano)
+NANO_CHAR_THRESHOLD=3000
+MINI_CHAR_THRESHOLD=15000
+ACTUAL_MODEL_MAX_COMPLETION_TOKENS=32000
+
+# Temperatures and max tokens
+DEFAULT_MODEL_TEMP=0.1
+DEFAULT_MODEL_MAX_TOKENS=16000
+LARGE_MODEL_TEMP=0.1
+LARGE_MODEL_MAX_TOKENS=16000
+TINY_MODEL_TEMP=0.0
+TINY_MODEL_MAX_TOKENS=8000
+
+# Behavior toggles
+FORCE_MINI_MODEL=false
+ENABLE_METADATA_REPAIR=true
+ENABLE_JSON_REPAIR=true
+MECH_SECOND_PASS=true       # allow second AI attempt for mechanical
+SPEC_MAX_TOKENS=16384
+
+# Logging
+PIPELINE_LOG_LEVEL=INFO     # to see detailed pipeline logs
+RESPONSES_TIMEOUT_SECONDS=200
+DEBUG_MODE=false
 ```
-
-### Expected Performance
-- **First run (uncached)**: ~3-4 minutes for 9 PDFs
-- **Cached runs**: ~11 seconds for 9 PDFs
-- **Extraction**: <1 second per PDF (if slow, check ENABLE_TABLE_EXTRACTION)
-
-### Key Environment Variables:
-
-*   `OPENAI_API_KEY` (Required): Your API key for OpenAI.
-*   `LOG_LEVEL`: Logging level (e.g., `INFO`, `DEBUG`, `WARNING`). Defaults to `INFO`.
-*   `BATCH_SIZE`: Number of PDF files to process concurrently by workers. Defaults to `10`.
-*   `MAX_CONCURRENT_API_CALLS`: Maximum number of concurrent calls to the OpenAI API, controlled by a semaphore at the API call site. Defaults to `20`.
-*   `API_RATE_LIMIT`: (Currently informational) Intended API calls per minute. Defaults to `60`.
-*   `TIME_WINDOW`: (Currently informational) Time window in seconds for the rate limit. Defaults to `60`.
-*   `MODEL_UPGRADE_THRESHOLD`: Character count threshold in extracted text above which a more powerful model (GPT-4o) is used instead of the mini model. Defaults to `15000`.
-*   `FORCE_MINI_MODEL`: Set to `true` to always use the mini model (GPT-4o-mini), overriding other model selection logic. This setting is reloaded dynamically during runtime. Defaults to `false`.
-*   `USE_4O_FOR_SCHEDULES`: Set to `true` to use GPT-4o for schedule drawings (panel, mechanical, etc.) regardless of size (unless `FORCE_MINI_MODEL` is true). Defaults to `true`.
-*   `ENABLE_AI_CACHE`: Set to `true` to enable caching of AI responses. Defaults to `false`. **⚠️ CRITICAL: Without this, processing takes 20-30x longer.**
-*   `AI_CACHE_DIR`: Directory to store AI cache files. Defaults to `.ai_cache`.
-*   `AI_CACHE_TTL_HOURS`: Time-to-live for cache files in hours. Defaults to `24`.
-*   `USE_SIMPLIFIED_PROCESSING`: **Deprecated.** This flag is no longer actively used to change processing logic. If set, a warning will be logged.
-*   `ENABLE_TABLE_EXTRACTION`: Enable PyMuPDF table detection in extraction. Defaults to `false` for performance. Set to `true` if you need table detection (slower). **⚠️ CRITICAL: Setting this to `true` causes 27x slowdown in extraction.**
-*   `DEBUG_MODE`: Set to `true` for additional debug information. Defaults to `false`.
-
-**Note:** Rate limiting is handled by the semaphore `MAX_CONCURRENT_API_CALLS`. The `API_RATE_LIMIT` and `TIME_WINDOW` values are currently informational placeholders.
 
 ## Usage
 
-Run the main processing script from the command line:
-
+Run a job (entire folder of PDFs)
 ```bash
 python main.py <input_folder> [output_folder]
 ```
+- Output defaults to <input_folder>/output when not provided.
 
-*   `<input_folder>`: Path to the folder containing the PDF drawings to process.
-*   `[output_folder]` (Optional): Path to the folder where processed files, logs, and metrics will be saved. If not provided, it defaults to `<input_folder>/output`.
-
-**Example:**
+Examples
 ```bash
-python main.py /path/to/my/drawings /path/to/my/output
+# with Makefile helpers
+make setup
+make run INPUT=./my_job_folder
+make run-single FILE=/path/to/my.pdf
 ```
 
-The script will:
-1.  Traverse the `<input_folder>` to find all PDF files.
-2.  Queue them for processing based on type and size.
-3.  Process each PDF: extract content, send to AI, parse response, normalize data.
-4.  Save structured JSON output, status files, and (if applicable) room files to the `<output_folder>`.
-5.  Log progress and errors to the console and to log files in `<output_folder>/logs/`.
-6.  Generate and save performance metrics in `<output_folder>/metrics/`.
-
-## How It Works (Processing Pipeline)
-
-1.  **Initialization (`main.py`):**
-    *   Sets up logging.
-    *   Initializes the OpenAI client.
-    *   Records application settings.
-
-2.  **Job Orchestration (`processing/job_processor.py`):**
-    *   Traverses the input job folder to find all PDF files (`utils/file_utils.py`).
-    *   Determines the drawing type for each PDF (`utils/drawing_utils.py`, `utils/constants.py`).
-    *   Prioritizes files: Architectural > Electrical > Mechanical > Plumbing > Fire Alarm > General. Within each type, smaller files are processed first.
-    *   Puts PDF files into an asynchronous queue.
-    *   Manages a pool of asynchronous workers (`process_worker`).
-    *   Uses a semaphore to limit concurrent API calls (`MAX_CONCURRENT_API_CALLS`).
-
-3.  **File Processing (`processing/file_processor.py` - `process_pdf_async` for each file):**
-    *   **Output Path Determination:** Sets up output paths for structured data, errors, and raw AI responses.
-    *   **Content Extraction (`services/extraction_service.py`):**
-        *   Selects an extractor based on `drawing_type` (e.g., `ArchitecturalExtractor`, `ElectricalExtractor`, or `PyMuPdfExtractor` as default).
-        *   Extracts raw text and tables from the PDF. Discipline-specific extractors may perform enhancements (e.g., highlighting panel schedule sections).
-        *   Checks if the extracted content is meaningful (above a minimum length). If not, a `skipped_unreadable` status file is created.
-        *   If extraction fails, an `extraction_failed` status file is created.
-    *   **Subtype Detection (`utils/drawing_utils.py`):** Further refines drawing type/subtype based on filename.
-    *   **AI Processing (`services/ai_service.py` - `process_drawing`):**
-        *   Checks AI cache (`utils/ai_cache.py`) if enabled. If a cached response exists and is valid, it's used.
-        *   Selects the AI model (GPT-4o-mini or GPT-4o) based on `FORCE_MINI_MODEL`, content length (`MODEL_UPGRADE_THRESHOLD`), and `USE_4O_FOR_SCHEDULES`.
-        *   Retrieves the "GENERAL" prompt from the `PromptRegistry` (`templates/prompt_registry.py`).
-        *   Makes an API call to OpenAI with the extracted content and the prompt. Includes retry logic.
-        *   If caching is enabled, the AI response is saved to the cache.
-    *   **JSON Parsing (`utils/json_utils.py` - `parse_json_safely`):**
-        *   Attempts to parse the AI's string response into a JSON object.
-        *   If parsing fails and the drawing type is "mechanical" or "panel" related, it may attempt to repair the JSON string (`repair_panel_json`) before retrying parsing.
-        *   If AI processing or JSON parsing ultimately fails, an `ai_processing_failed` status file is created (potentially with the raw AI response).
-    *   **Metadata Validation (`schemas/metadata.py`):** Validates `DRAWING_METADATA` if present in the parsed JSON.
-    *   **Data Normalization (`services/normalizers.py`):**
-        *   If the parsed JSON corresponds to specific types (e.g., panel schedules, mechanical schedules, plumbing schedules, fire alarm systems), normalization functions are applied to standardize field names and data formats.
-    *   **Save Output (`services/storage_service.py`):**
-        *   Saves the structured (and normalized) JSON data to a `_structured.json` file.
-        *   Uses `aiofiles` for asynchronous file operations.
-        *   Handles `datetime` objects correctly during JSON serialization.
-    *   **Room Generation (`templates/room_templates.py`):**
-        *   If the drawing is an Architectural floor plan, it processes the structured JSON to generate `_a_rooms_details.json` and `_e_rooms_details.json` files.
-
-4.  **Completion (`main.py`):**
-    *   Logs total processing time.
-    *   Generates and logs a performance report (`utils/performance_utils.py`).
-    *   Saves performance metrics to a file.
-    *   Checks for API performance degradation against historical data.
-
-## Output
-
-All output files are saved in the specified `output_folder`.
-
-*   **Structured Data:**
-    *   Location: `<output_folder>/<DrawingType>/<original_filename_base>_structured.json`
-    *   Content: The structured JSON data extracted and processed from the PDF.
-*   **Status/Error Files:**
-    *   If a PDF is unreadable: `<output_folder>/<DrawingType>/<original_filename_base>_structured.json` (with status "skipped_unreadable").
-    *   If extraction fails: `<output_folder>/<DrawingType>/<original_filename_base>_error.json` (with status "extraction_failed").
-    *   If AI processing or JSON parsing fails: `<output_folder>/<DrawingType>/<original_filename_base>_error.json` (with status "ai_processing_failed").
-    *   If JSON parsing fails but a raw AI response was received: `<output_folder>/<DrawingType>/<original_filename_base>_raw_response_error.txt`
-    *   If saving the final JSON fails: `<output_folder>/<DrawingType>/<original_filename_base>_error.json` (with status "json_save_failed").
-    *   For unexpected errors: `<output_folder>/<DrawingType>/<original_filename_base>_error.json` (with status "unexpected_error").
-*   **Room Files (for Architectural floor plans):**
-    *   Location: `<output_folder>/Architectural/`
-    *   Files:
-        *   `<original_filename_base>_a_rooms_details.json`
-        *   `<original_filename_base>_e_rooms_details.json`
-*   **Log Files:**
-    *   Location: `<output_folder>/logs/`
-    *   File: `process_log_<timestamp>.txt`
-    *   Content: Detailed logs of the application's execution.
-*   **Performance Metrics:**
-    *   Location: `<output_folder>/metrics/`
-    *   File: `metrics_<timestamp>.json`
-    *   Content: Performance statistics for the processing run.
-
-## Core Components
-
-*   **`main.py`**: Orchestrates the entire application flow.
-*   **`config/settings.py`**: Manages application configuration via environment variables.
-*   **`processing/job_processor.py`**: Handles the processing of an entire batch of PDF files, managing queues and workers.
-*   **`processing/file_processor.py`**: Contains the logic for processing a single PDF file through extraction, AI, and normalization.
-*   **`services/ai_service.py`**: Interfaces with the OpenAI API, handles model selection, prompt retrieval, and API call retries.
-*   **`services/extraction_service.py`**: Provides PDF content extraction capabilities, with specialized extractors for different drawing disciplines.
-*   **`services/normalizers.py`**: Standardizes the structure and field names of the extracted JSON data for specific schedule types.
-*   **`services/storage_service.py`**: Manages asynchronous saving of output files (JSON, text).
-*   **`templates/prompt_registry.py`**: A central registry for AI prompts. Currently configured to route all requests to a single, comprehensive "GENERAL" prompt regardless of drawing type.
-*   **`templates/prompt_templates.py`**: Main interface for accessing prompts. Imports discipline-specific prompt modules to register them with the registry.
-*   **`templates/room_templates.py`**: Logic for generating structured room data JSON files from architectural drawing outputs.
-*   **`utils/performance_utils.py`**: A robust module for tracking, reporting, and saving performance metrics of various operations.
-*   **`utils/ai_cache.py`**: Implements caching for AI API responses to reduce costs and improve speed on repeated inputs.
-*   **`utils/logging_utils.py`**: Sets up and provides structured logging capabilities.
-*   **`utils/json_utils.py`**: Includes utilities for safe JSON parsing and repairing malformed JSON, especially from AI outputs.
-
-## Key Architectural Decisions
-
-*   **Single General Prompt:** The system currently relies on a single, highly detailed "GENERAL" prompt (`templates/prompt_registry.py`) that routes all drawing types to the same comprehensive prompt. This decision is based on the observation that modern AI models (like GPT-4o) can effectively handle various construction drawing types with a well-crafted general prompt, simplifying prompt maintenance. The registry system supports discipline-specific decorators for future extension, but they are not currently used at runtime.
-*   **Asynchronous Operations:** The extensive use of `asyncio` allows for high I/O-bound concurrency, making the system efficient for processing many files, especially when waiting for API responses or file operations.
-*   **Discipline-Specific Enhancements in Extractors:** While the AI prompt is general, the PDF extraction phase (`services/extraction_service.py`) employs discipline-specific extractor classes. These classes can apply pre-processing or targeted extraction techniques to better prepare the data for the general AI prompt (e.g., `ElectricalExtractor` might add hints about panel schedule structures).
-*   **Environment-Driven Configuration:** Centralizing configuration in `.env` files and `config/settings.py` makes the application adaptable to different environments and setups without code changes.
-*   **Detailed Performance Tracking:** The `utils/performance_utils.py` module provides deep insights into the performance of different stages of the pipeline, which is crucial for optimization and identifying bottlenecks.
-
-## Specialized Prompts vs. General Prompt (Performance Trade-off)
-
-We maintain discipline- and subtype-specific prompts under `templates/prompts/*.py` (Architectural, Electrical, Mechanical, Plumbing, Fire Alarm). Through testing, specialized prompts increased token usage and slowed uncached runs with little accuracy benefit on most drawings.
-
-Therefore, at runtime we default to a single comprehensive "GENERAL" prompt for all drawings:
-- **Faster cold runs** (fewer prompt tokens)
-- **Simpler to maintain**
-- **Works well with modern models** (JSON mode + robust extraction/normalization)
-
-**What's enabled today:**
-- `PromptRegistry.get(...)` always returns the GENERAL prompt
-- Specialized prompts are present in code but are not used at runtime by default
-
-**When to consider specialized prompts:**
-- Debugging very tricky sheets where the GENERAL prompt underperforms
-- Targeted use in a failure-retry path (e.g., only if JSON parsing fails)
-- Small documents where prompt token overhead is negligible
-
-**How to enable (optional):**
-
-1. Ensure prompt modules are imported so their decorators register prompts:
-```python
-# templates/prompts/__init__.py
-from .architectural import *  # noqa
-from .electrical import *     # noqa
-from .mechanical import *     # noqa
-from .plumbing import *       # noqa
-from .metadata import *       # noqa
+Convenience CLI
+```bash
+# From repo root with venv active
+./ohmni process MyProjectFolderOnDesktop
+./ohmni file MyProjectFolderOnDesktop/Electrical/E1.01.pdf
 ```
 
-2. Add an environment flag:
-```dotenv
-# .env
-USE_SPECIALIZED_PROMPTS=false     # default and recommended
-# Optional retry strategy: only use specialized prompts on parse failure (not enabled by default)
-RETRY_WITH_SPECIALIZED_PROMPTS=false
-```
+## Model Routing Details
 
-3. Update the registry to honor the flag:
-```python
-# templates/prompt_registry.py
-import os
-# ... keep the rest of the file as-is ...
+- Schedule/specification detection:
+  - Determined by filename and drawing_type hints
+  - SCHEDULE_MODEL is used for schedules/spec docs
+- Size-based routing:
+  - < NANO_CHAR_THRESHOLD → TINY_MODEL (if set) or DEFAULT_MODEL
+  - < MINI_CHAR_THRESHOLD → DEFAULT_MODEL
+  - >= MINI_CHAR_THRESHOLD → LARGE_DOC_MODEL
+- Force-mini override: FORCE_MINI_MODEL=true routes non-schedules to DEFAULT_MODEL
+- Specifications cap output tokens via SPEC_MAX_TOKENS
 
-def get(self, drawing_type: str, subtype: Optional[str] = None) -> str:
-    use_specialized = os.getenv("USE_SPECIALIZED_PROMPTS", "false").lower() == "true"
-    if use_specialized:
-        key = f"{drawing_type}_{subtype}".upper() if subtype else (drawing_type or "").upper()
-        if key in self._prompts:
-            return self._prompts[key]
-        if drawing_type and drawing_type.upper() in self._prompts:
-            return self._prompts[drawing_type.upper()]
-    # Fallback (and default): single comprehensive prompt
-    return self._prompts.get("GENERAL", "")
-```
+All text processing uses Chat Completions with response_format=json_object. OCR tiles use the Responses API vision endpoint.
 
-**Note:** Enabling specialized prompts increases token usage and cost; the runtime penalty is largely mitigated on subsequent runs if `ENABLE_AI_CACHE=true`.
+## Architectural Room Templates
+
+- Triggered for Architectural floor plans (file naming + metadata)
+- Generates:
+  - <name>_a_rooms_details.json (architectural)
+  - <name>_e_rooms_details.json (electrical)
+- Merges AI-parsed data onto template, with multiple fallbacks for room discovery
+
+## Performance
+
+- Caching (ENABLE_AI_CACHE=true): 20–30x faster on repeated runs
+- Table extraction: ENABLE_TABLE_EXTRACTION=false avoids major extraction slowdowns
+- OCR runs only when per-page density is low
+- Metrics saved to <output>/metrics and summarized in logs
+- Slowdown detection compares current API timing to historical averages
 
 ## Troubleshooting
 
-*   **Check Log Files:** The primary source of information for diagnosing issues is the log files located in `<output_folder>/logs/`. Set `LOG_LEVEL=DEBUG` in your `.env` file for more verbose logging.
-*   **Examine Error Files:** If a PDF fails to process, an `_error.json` file will be created in the output directory for that file, containing details about the failure.
-*   **OpenAI API Key:** Ensure your `OPENAI_API_KEY` is correctly set in the `.env` file and has sufficient quota.
-*   **File Permissions:** Verify that the application has read permissions for the input folder and write permissions for the output folder.
-*   **Dependencies:** Ensure all dependencies in `requirements.txt` are correctly installed in your virtual environment.
+- No output or empty JSON?
+  - Check <output>/logs for warnings/errors
+  - Verify ENABLE_TABLE_EXTRACTION=false for speed (or true if you need heavy table parsing)
+  - Verify OCR settings; look for “OCR TRIGGERED/SKIPPED” logs
+- JSON parsing failed?
+  - Set ENABLE_JSON_REPAIR=true
+  - Inspect saved _error.json and any raw response snippet
+- Metadata incorrect or missing?
+  - Set ENABLE_METADATA_REPAIR=true
+  - Ensure title block text was extracted (logs show char counts and title block status)
+- Timeouts?
+  - Increase RESPONSES_TIMEOUT_SECONDS
+  - Reduce max tokens (DEFAULT_MODEL_MAX_TOKENS / LARGE_MODEL_MAX_TOKENS)
+- Rate limits / concurrency?
+  - Adjust BATCH_SIZE to control number of workers
+  - There’s no global API semaphore; limit queue concurrency via BATCH_SIZE
 
-### Performance Issues
+## Notes on Prompts
 
-For detailed performance troubleshooting and optimization, see:
-*   **[Performance Documentation](docs/PERFORMANCE.md)** - Comprehensive performance analysis, baselines, and optimization strategies
-*   **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)** - Common issues and their solutions
+- The PromptRegistry always returns the GENERAL prompt at runtime
+- Discipline-specific prompt modules are present but not used by default
+- Modern models perform well with a single comprehensive JSON-focused prompt
 
-**Quick Performance Fixes:**
-1. **Extraction slow?** Set `ENABLE_TABLE_EXTRACTION=false` in `.env`
-2. **Processing slow?** Set `ENABLE_AI_CACHE=true` in `.env`
-3. **First run always slow?** This is normal - subsequent runs will be 20-30x faster
+## License and Credits
 
-## Contributing
+Private project — all rights reserved.
 
-This project is currently private and not accepting contributions. All rights reserved.
-
-## 👨‍💻 Developer
-
-**Collin** - Construction Technology Developer
-
-Building AI-powered solutions for the construction industry. This project represents months of development work in document processing, AI integration, and construction workflow automation.
-
-**Connect:**
-- GitHub: [@BTCElectrician](https://github.com/BTCElectrician)
+Developer: Collin (BTCElectrician)
+- GitHub: https://github.com/BTCElectrician
 - Email: Velardecollin@gmail.com
+```
 
----
-
-**© 2024 All Rights Reserved** - This software and its documentation are proprietary and confidential. Unauthorized copying, distribution, or use is strictly prohibited.
+<chatName="Updated README with OCR, Chat Completions, JSON repair, and normalization details"/>
