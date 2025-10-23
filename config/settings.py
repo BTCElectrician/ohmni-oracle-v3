@@ -39,16 +39,6 @@ OCR_ENABLED = os.getenv("OCR_ENABLED", "true").lower() == "true"
 OCR_THRESHOLD = int(os.getenv("OCR_THRESHOLD", "1500"))  # Characters per page threshold (not total)
 OCR_MAX_PAGES = int(os.getenv("OCR_MAX_PAGES", "2"))
 
-# Processing Mode Configuration
-# DEPRECATED: This setting is no longer actively used in the codebase
-USE_SIMPLIFIED_PROCESSING = (
-    os.getenv("USE_SIMPLIFIED_PROCESSING", "false").lower() == "true"
-)
-
-# Optionally log a warning when loaded
-if os.getenv("USE_SIMPLIFIED_PROCESSING") is not None:
-    logging.warning("USE_SIMPLIFIED_PROCESSING is deprecated and will be removed in a future version")
-
 # Model Selection Configuration - Define as a function to reload each time
 def get_force_mini_model():
     """Get the FORCE_MINI_MODEL setting from environment"""
@@ -93,9 +83,6 @@ ACTUAL_MODEL_MAX_COMPLETION_TOKENS = int(os.getenv("ACTUAL_MODEL_MAX_COMPLETION_
 # Threshold character count for using GPT-4o instead of GPT-4o-mini
 MODEL_UPGRADE_THRESHOLD = int(os.getenv("MODEL_UPGRADE_THRESHOLD", "15000"))
 
-# Whether to use GPT-4o for schedule drawings regardless of size
-USE_4O_FOR_SCHEDULES = os.getenv("USE_4O_FOR_SCHEDULES", "true").lower() == "true"
-
 # Template Configuration
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 
@@ -112,12 +99,10 @@ def get_all_settings() -> Dict[str, Any]:
         "TIME_WINDOW": TIME_WINDOW,
         "TEMPLATE_DIR": TEMPLATE_DIR,
         "DEBUG_MODE": DEBUG_MODE,
-        "USE_SIMPLIFIED_PROCESSING": USE_SIMPLIFIED_PROCESSING,
-        "FORCE_MINI_MODEL": get_force_mini_model(),  # Always get latest value
+        "FORCE_MINI_MODEL": get_force_mini_model(),
         "ENABLE_METADATA_REPAIR": get_enable_metadata_repair(),
         "MAX_CONCURRENT_API_CALLS": MAX_CONCURRENT_API_CALLS,
         "MODEL_UPGRADE_THRESHOLD": MODEL_UPGRADE_THRESHOLD,
-        "USE_4O_FOR_SCHEDULES": USE_4O_FOR_SCHEDULES,
         "DEFAULT_MODEL": DEFAULT_MODEL,
         "LARGE_DOC_MODEL": LARGE_DOC_MODEL,
         "SCHEDULE_MODEL": SCHEDULE_MODEL,
@@ -132,13 +117,7 @@ def get_all_settings() -> Dict[str, Any]:
         "TINY_MODEL_TEMP": TINY_MODEL_TEMP,
         "TINY_MODEL_MAX_TOKENS": TINY_MODEL_MAX_TOKENS,
         "ACTUAL_MODEL_MAX_COMPLETION_TOKENS": ACTUAL_MODEL_MAX_COMPLETION_TOKENS,
-        # Visibility for GPT-5 routing and stability toggles
-        "USE_GPT5_API": os.getenv("USE_GPT5_API", "false"),
-        "GPT5_FOR_LARGE_ONLY": os.getenv("GPT5_FOR_LARGE_ONLY", "true"),
-        "GPT5_MIN_LENGTH_FOR_RESPONSES": os.getenv("GPT5_MIN_LENGTH_FOR_RESPONSES", str(MINI_CHAR_THRESHOLD)),
         "RESPONSES_TIMEOUT_SECONDS": os.getenv("RESPONSES_TIMEOUT_SECONDS", "200"),
-        "GPT5_FAILURE_THRESHOLD": os.getenv("GPT5_FAILURE_THRESHOLD", "2"),
-        "GPT5_DISABLE_ON_EMPTY_OUTPUT": os.getenv("GPT5_DISABLE_ON_EMPTY_OUTPUT", "true"),
         # OCR Configuration visibility
         "OCR_ENABLED": OCR_ENABLED,
         "OCR_THRESHOLD": OCR_THRESHOLD,
