@@ -22,15 +22,14 @@ from utils.drawing_utils import detect_drawing_info
 from config.settings import (
     get_force_mini_model,
     MODEL_UPGRADE_THRESHOLD,
-    USE_4O_FOR_SCHEDULES,
     DEFAULT_MODEL, LARGE_DOC_MODEL, SCHEDULE_MODEL,
     TINY_MODEL, TINY_MODEL_THRESHOLD,
     DEFAULT_MODEL_TEMP, DEFAULT_MODEL_MAX_TOKENS,
     LARGE_MODEL_TEMP, LARGE_MODEL_MAX_TOKENS,
     TINY_MODEL_TEMP, TINY_MODEL_MAX_TOKENS,
     ACTUAL_MODEL_MAX_COMPLETION_TOKENS,
-    NANO_CHAR_THRESHOLD,  # NEW
-    MINI_CHAR_THRESHOLD   # NEW
+    NANO_CHAR_THRESHOLD,
+    MINI_CHAR_THRESHOLD
 )
 from utils.exceptions import AIProcessingError, JSONValidationError
 from config.settings import get_enable_metadata_repair
@@ -40,12 +39,7 @@ from utils.ai_cache import load_cache, save_cache
 logger = logging.getLogger(__name__)
 
 # Chat Completions configuration
-
-# Additional environment variables for stability
 RESPONSES_TIMEOUT_SECONDS = int(os.getenv("RESPONSES_TIMEOUT_SECONDS", "200"))
-SCHEDULES_ENABLED = os.getenv("SCHEDULES_ENABLED", "false").lower() == "true"
-# Deprecated: do not read at import time; use dynamic getter instead
-# ENABLE_METADATA_REPAIR = os.getenv("ENABLE_METADATA_REPAIR", "true").lower() == "true"
 
 
 
