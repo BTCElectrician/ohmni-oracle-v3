@@ -38,6 +38,12 @@ async def main_async():
     logging.info(f"Output will be saved to: {output_folder}")
     logging.info(f"Run ID: {run_id}")
     logging.info(f"Application settings: {get_all_settings()}")
+    
+    # Log critical settings for visibility
+    settings = get_all_settings()
+    logging.info(f"⚙️  RESPONSES_TIMEOUT_SECONDS: {settings.get('RESPONSES_TIMEOUT_SECONDS')}")
+    logging.info(f"⚙️  DEFAULT_MODEL: {settings.get('DEFAULT_MODEL')}")
+    logging.info(f"⚙️  LARGE_DOC_MODEL: {settings.get('LARGE_DOC_MODEL')}")
 
     try:
         # Verify prompt registry is fully populated

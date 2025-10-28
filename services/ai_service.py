@@ -243,6 +243,12 @@ async def make_chat_completion_request(
             "response_format": {"type": "json_object"},
         }
         
+        # Log timeout visibility
+        logger.info(
+            f"API request: timeout={RESPONSES_TIMEOUT_SECONDS}s, "
+            f"file={os.path.basename(file_path) if file_path else 'unknown'}"
+        )
+        
         # Make the API call
         response = await asyncio.wait_for(
             client.chat.completions.create(**api_params),
