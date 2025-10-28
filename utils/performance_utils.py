@@ -38,6 +38,7 @@ class PerformanceTracker:
             "total_processing": [],
             "ocr_processing": [],  # New category for OCR operations
             "ocr_decision": [],  # New category for OCR decision metrics
+            "api_cache_hit": [],  # New category for cache hits (separate from live API)
         }
 
         # Add metrics for tracking API variability
@@ -238,6 +239,78 @@ class PerformanceTracker:
                 api_percentage = (api_stats["total_time"] / total_processing_time) * 100
                 report["api_percentage"] = api_percentage
 
+        # Add token statistics for API calls
+        try:
+            api_req = self.metrics.get("api_request", [])
+            token_records = [m for m in api_req if "completion_tokens" in m and m["completion_tokens"] is not None]
+            
+            if token_records:
+                completion_tokens_list = [m.get("completion_tokens", 0) for m in token_records]
+                tps_list = [
+                    (m.get("completion_tokens", 0) / m["duration"]) if m["duration"] > 0 else 0
+                    for m in token_records
+                ]
+                
+                total_comp = sum(completion_tokens_list)
+                avg_comp = total_comp / len(token_records)
+                avg_tps = sum(tps_list) / len(tps_list) if tps_list else 0
+                
+                # Calculate percentiles
+                sorted_comp = sorted(completion_tokens_list)
+                sorted_tps = sorted(tps_list)
+                
+                def percentile(data, p):
+                    """Calculate percentile from sorted data"""
+                    if not data:
+                        return 0
+                    k = (len(data) - 1) * p
+                    f = int(k)
+                    c = k - f
+                    if f + 1 < len(data):
+                        return data[f] + c * (data[f + 1] - data[f])
+                    return data[f]
+                
+                report["api_token_statistics"] = {
+                    "samples": len(token_records),
+                    "total_completion_tokens": total_comp,
+                    "avg_completion_tokens": avg_comp,
+                    "avg_tokens_per_second": avg_tps,
+                    "completion_tokens_percentiles": {
+                        "p50": percentile(sorted_comp, 0.50),
+                        "p95": percentile(sorted_comp, 0.95),
+                        "p99": percentile(sorted_comp, 0.99),
+                    },
+                    "tokens_per_second_percentiles": {
+                        "p50": percentile(sorted_tps, 0.50),
+                        "p95": percentile(sorted_tps, 0.95),
+                        "p99": percentile(sorted_tps, 0.99),
+                    },
+                }
+                
+                # Per-model breakdown
+                models = set(m.get("model") for m in token_records if m.get("model"))
+                if models:
+                    per_model_stats = {}
+                    for model in models:
+                        model_records = [m for m in token_records if m.get("model") == model]
+                        model_comp = [m.get("completion_tokens", 0) for m in model_records]
+                        model_tps = [
+                            (m.get("completion_tokens", 0) / m["duration"]) if m["duration"] > 0 else 0
+                            for m in model_records
+                        ]
+                        
+                        per_model_stats[model] = {
+                            "samples": len(model_records),
+                            "avg_completion_tokens": sum(model_comp) / len(model_comp) if model_comp else 0,
+                            "avg_tokens_per_second": sum(model_tps) / len(model_tps) if model_tps else 0,
+                            "total_completion_tokens": sum(model_comp),
+                        }
+                    
+                    report["api_token_statistics"]["per_model"] = per_model_stats
+                    
+        except Exception as e:
+            self.logger.debug(f"Token stats aggregation error: {str(e)}")
+
         return report
 
     def log_report(self):
@@ -249,8 +322,9 @@ class PerformanceTracker:
         self.logger.info("=== Performance Report ===")
 
         for category, data in report.items():
-            if category == "api_statistics" or category == "api_percentage":
-                continue  # Skip these for now, we'll handle them separately
+            # Skip special report sections (not operation categories)
+            if category in ["api_statistics", "api_percentage", "api_token_statistics", "timestamp", "formatted_time"]:
+                continue
 
             self.logger.info(f"Category: {category}")
             self.logger.info(f"  Overall average: {data['overall_average']:.2f}s")
@@ -280,6 +354,37 @@ class PerformanceTracker:
                 self.logger.info(
                     f"  Percentage of total time: {report['api_percentage']:.2f}%"
                 )
+
+        # Log API token statistics (condensed for log file, full details in JSON)
+        if "api_token_statistics" in report:
+            tstats = report["api_token_statistics"]
+            self.logger.info("=== API Token Statistics ===")
+            self.logger.info(f"  Samples: {tstats['samples']}, Total tokens: {tstats['total_completion_tokens']:,}")
+            self.logger.info(f"  Avg: {tstats['avg_completion_tokens']:.0f} tokens/call, {tstats['avg_tokens_per_second']:.1f} tokens/sec")
+            
+            # Only log percentiles if DEBUG level (full details always in metrics JSON)
+            if self.logger.isEnabledFor(logging.DEBUG):
+                # Log percentiles
+                if "completion_tokens_percentiles" in tstats:
+                    cp = tstats["completion_tokens_percentiles"]
+                    self.logger.debug(f"  Completion tokens percentiles - p50: {cp['p50']:.0f}, p95: {cp['p95']:.0f}, p99: {cp['p99']:.0f}")
+                
+                if "tokens_per_second_percentiles" in tstats:
+                    tp = tstats["tokens_per_second_percentiles"]
+                    self.logger.debug(f"  Tokens/sec percentiles - p50: {tp['p50']:.2f}, p95: {tp['p95']:.2f}, p99: {tp['p99']:.2f}")
+                
+                # Log per-model breakdown
+                if "per_model" in tstats:
+                    self.logger.debug("  Per-model breakdown:")
+                    for model, stats in tstats["per_model"].items():
+                        self.logger.debug(
+                            f"    {model}: {stats['samples']} calls, "
+                            f"{stats['avg_completion_tokens']:.0f} avg tokens, "
+                            f"{stats['avg_tokens_per_second']:.2f} tokens/sec"
+                        )
+            else:
+                # Condensed summary at INFO level
+                self.logger.info(f"  💡 Full token details & percentiles → metrics JSON file")
 
         self.logger.info("==========================")
 

@@ -265,13 +265,20 @@ async def make_chat_completion_request(
         request_time = time.time() - start_time
         usage = response.usage
         
-        if usage:
-            logger.info(
-                f"Token usage - Input: {usage.prompt_tokens}, "
-                f"Output: {usage.completion_tokens}"
-            )
+        # Extract token counts
+        prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+        completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
+        total_tokens = getattr(usage, "total_tokens", None) if usage else None
         
-        # Track performance
+        if usage:
+            tps = (completion_tokens / request_time) if (completion_tokens and request_time > 0) else None
+            logger.info(
+                f"Token usage - Input: {prompt_tokens}, Output: {completion_tokens}, Total: {total_tokens}"
+            )
+            if tps is not None:
+                logger.info(f"Throughput: {tps:.2f} tokens/sec (completion)")
+        
+        # Track performance with token details
         tracker = get_tracker()
         tracker.add_metric_with_context(
             category="api_request",
@@ -279,7 +286,13 @@ async def make_chat_completion_request(
             file_path=file_path,
             drawing_type=drawing_type,
             model=model,
-            api_type="chat"
+            api_type="chat",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            tokens_per_second=(completion_tokens / request_time) if (completion_tokens and request_time > 0) else None,
+            max_tokens_param=max_tokens,
+            timeout_seconds=RESPONSES_TIMEOUT_SECONDS,
         )
         
         logger.info(
@@ -384,6 +397,20 @@ async def call_with_cache(
     # Try to load from cache
     cached_response = load_cache(prompt, params)
     if cached_response:
+        # Track cache hits separately (don't pollute API timing stats)
+        try:
+            tracker = get_tracker()
+            tracker.add_metric_with_context(
+                category="api_cache_hit",
+                duration=0.0,
+                file_path=file_path,
+                drawing_type=drawing_type,
+                model=model,
+                api_type="chat",
+                cache_hit=True,
+            )
+        except Exception:
+            pass
         return cached_response
     
     # Use Chat Completions API

@@ -41,9 +41,26 @@ async def main_async():
     
     # Log critical settings for visibility
     settings = get_all_settings()
-    logging.info(f"⚙️  RESPONSES_TIMEOUT_SECONDS: {settings.get('RESPONSES_TIMEOUT_SECONDS')}")
+    logging.info("=== Model & Token Configuration ===")
     logging.info(f"⚙️  DEFAULT_MODEL: {settings.get('DEFAULT_MODEL')}")
     logging.info(f"⚙️  LARGE_DOC_MODEL: {settings.get('LARGE_DOC_MODEL')}")
+    logging.info(f"⚙️  SCHEDULE_MODEL: {settings.get('SCHEDULE_MODEL')}")
+    logging.info(f"⚙️  TINY_MODEL: {settings.get('TINY_MODEL') or 'disabled'}")
+    logging.info(f"⚙️  ACTUAL_MODEL_MAX_COMPLETION_TOKENS: {settings.get('ACTUAL_MODEL_MAX_COMPLETION_TOKENS')}")
+    logging.info(f"⚙️  DEFAULT_MODEL_MAX_TOKENS: {settings.get('DEFAULT_MODEL_MAX_TOKENS')}")
+    logging.info(f"⚙️  LARGE_MODEL_MAX_TOKENS: {settings.get('LARGE_MODEL_MAX_TOKENS')}")
+    logging.info(f"⚙️  SPEC_MAX_TOKENS: {os.getenv('SPEC_MAX_TOKENS', '16384')}")
+    logging.info(f"⚙️  RESPONSES_TIMEOUT_SECONDS: {settings.get('RESPONSES_TIMEOUT_SECONDS')}")
+    logging.info(f"⚙️  NANO_CHAR_THRESHOLD: {settings.get('NANO_CHAR_THRESHOLD')}")
+    logging.info(f"⚙️  MINI_CHAR_THRESHOLD: {settings.get('MINI_CHAR_THRESHOLD')}")
+    logging.info("=== OCR Configuration ===")
+    logging.info(
+        f"⚙️  OCR_MODEL: {os.getenv('OCR_MODEL', 'gpt-4o-mini')}, "
+        f"OCR_TOKENS_PER_TILE: {os.getenv('OCR_TOKENS_PER_TILE', '3000')}, "
+        f"OCR_DPI: {os.getenv('OCR_DPI', '300')}, "
+        f"OCR_GRID_SIZE: {os.getenv('OCR_GRID_SIZE', '1')}"
+    )
+    logging.info("===================================")
 
     try:
         # Verify prompt registry is fully populated
