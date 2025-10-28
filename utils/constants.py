@@ -1,18 +1,5 @@
 from utils.drawing_utils import detect_drawing_info
 
-DRAWING_TYPES = {
-    "Architectural": ["A", "AD"],
-    "Electrical": ["E", "ED"],
-    "Mechanical": ["M", "MD"],
-    "Plumbing": ["P", "PD"],
-    "Site": ["S", "SD"],
-    "Civil": ["C", "CD"],
-    "Low Voltage": ["LV", "LD"],
-    "Fire Alarm": ["FA", "FD", "LV", "LD"],
-    "Kitchen": ["K", "KD"],
-    "Specifications": ["SPEC", "SP"],
-}
-
 
 def get_drawing_type(filename: str) -> str:
     """
