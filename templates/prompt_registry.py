@@ -162,3 +162,21 @@ _registry.register(
 def get_registry() -> PromptRegistry:
     """Get the global prompt registry instance."""
     return _registry
+
+
+def verify_registry() -> bool:
+    """
+    Verify required prompt keys are present.
+    Returns True if all required prompts are available, else False.
+    """
+    try:
+        registry = get_registry()
+        required = ["GENERAL", "METADATA_REPAIR"]
+        missing = [key for key in required if not registry.contains(key)]
+        if missing:
+            logger.warning(f"Prompt registry missing keys: {missing}")
+            return False
+        return True
+    except Exception as exc:
+        logger.warning(f"Failed to verify prompt registry: {exc}")
+        return False

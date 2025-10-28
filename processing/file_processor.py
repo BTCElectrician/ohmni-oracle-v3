@@ -6,8 +6,7 @@ import json
 import uuid
 import time
 from enum import Enum, auto
-from typing import Dict, Any, Optional, List, TypedDict, Literal, Union, cast
-from datetime import datetime
+from typing import Dict, Any, Optional, List, TypedDict, Literal, cast
 from tqdm.asyncio import tqdm
 
 from openai import AsyncOpenAI
@@ -86,7 +85,7 @@ async def _save_status_file(
         "original_file": original_pdf_path,
         "status": status,
         "message": message,
-        "timestamp": asyncio.get_event_loop().time(),
+        "timestamp": time.time(),
     }
     try:
         await storage.save_json(status_data, file_path)
@@ -306,7 +305,9 @@ class FileProcessingPipeline:
                     pdf_path=self.pdf_path,
                     current_text=extraction_result.raw_text,
                     threshold=OCR_THRESHOLD,
-                    max_pages=OCR_MAX_PAGES
+                    max_pages=OCR_MAX_PAGES,
+                    page_count=page_count,
+                    assume_ocr_needed=should_ocr
                 )
                 
                 ocr_duration = time.time() - ocr_start_time

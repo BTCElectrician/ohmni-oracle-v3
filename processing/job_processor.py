@@ -25,16 +25,7 @@ async def process_worker(
 ) -> None:
     """
     Enhanced worker process that takes jobs from the queue and processes them.
-    Uses a semaphore to limit concurrent API calls.
-
-    Args:
-        queue: Queue of PDF files to process
-        client: OpenAI client
-        output_folder: Output folder for processed files
-        templates_created: Dictionary tracking created templates
-        results: List to collect processing results
-        worker_id: Unique identifier for this worker
-        semaphore: Semaphore to limit concurrent API calls
+    Uses per-file timeouts and records queue wait times.
     """
     logger = logging.getLogger(__name__)
     logger.info(f"Worker {worker_id} started")
@@ -233,7 +224,7 @@ async def process_job_site_async(job_folder: str, output_folder: str, client) ->
     all_results = []
 
     # Create and start workers
-    with tqdm(total=len(pdf_files), desc="Overall Progress") as overall_pbar:
+    with tqdm(total=len(enqueued_files), desc="Overall Progress") as overall_pbar:
         # Track original queue size for progress
         original_queue_size = queue.qsize()
 

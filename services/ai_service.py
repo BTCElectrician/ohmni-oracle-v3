@@ -7,8 +7,7 @@ import time
 import os
 import re
 import asyncio
-import uuid
-from typing import Dict, Any, Optional, TypeVar, Generic, List
+from typing import Dict, Any, Optional, List
 from openai import AsyncOpenAI
 from tenacity import (
     retry,
@@ -21,15 +20,21 @@ from utils.performance_utils import time_operation, time_operation_context, get_
 from utils.drawing_utils import detect_drawing_info
 from config.settings import (
     get_force_mini_model,
-    MODEL_UPGRADE_THRESHOLD,
-    DEFAULT_MODEL, LARGE_DOC_MODEL, SCHEDULE_MODEL,
-    TINY_MODEL, TINY_MODEL_THRESHOLD,
-    DEFAULT_MODEL_TEMP, DEFAULT_MODEL_MAX_TOKENS,
-    LARGE_MODEL_TEMP, LARGE_MODEL_MAX_TOKENS,
-    TINY_MODEL_TEMP, TINY_MODEL_MAX_TOKENS,
+    DEFAULT_MODEL,
+    LARGE_DOC_MODEL,
+    SCHEDULE_MODEL,
+    TINY_MODEL,
+    TINY_MODEL_THRESHOLD,
+    DEFAULT_MODEL_TEMP,
+    DEFAULT_MODEL_MAX_TOKENS,
+    LARGE_MODEL_TEMP,
+    LARGE_MODEL_MAX_TOKENS,
+    TINY_MODEL_TEMP,
+    TINY_MODEL_MAX_TOKENS,
     ACTUAL_MODEL_MAX_COMPLETION_TOKENS,
     NANO_CHAR_THRESHOLD,
-    MINI_CHAR_THRESHOLD
+    MINI_CHAR_THRESHOLD,
+    RESPONSES_TIMEOUT_SECONDS,
 )
 from utils.exceptions import AIProcessingError, JSONValidationError
 from config.settings import get_enable_metadata_repair
@@ -38,20 +43,19 @@ from utils.ai_cache import load_cache, save_cache
 # Initialize logger at module level
 logger = logging.getLogger(__name__)
 
-# Chat Completions configuration
-RESPONSES_TIMEOUT_SECONDS = int(os.getenv("RESPONSES_TIMEOUT_SECONDS", "200"))
+# Chat Completions configuration remains centralized in settings
 
 
-
-def _is_schedule_or_spec(drawing_type: Optional[str], pdf_path: Optional[str]) -> bool:
+def _is_schedule_doc(drawing_type: Optional[str], pdf_path: Optional[str]) -> bool:
     dt = (drawing_type or "").lower()
     name = os.path.basename(pdf_path or "").lower()
-    return any([
-        "panel" in dt or "schedule" in dt,
-        "schedule" in name or "panel" in name,
-        "spec" in dt or "specification" in dt,
-        "spec" in name or "specification" in name,
-    ])
+    return ("panel" in dt or "schedule" in dt) or ("panel" in name or "schedule" in name)
+
+
+def _is_spec_doc(drawing_type: Optional[str], pdf_path: Optional[str]) -> bool:
+    dt = (drawing_type or "").lower()
+    name = os.path.basename(pdf_path or "").lower()
+    return ("spec" in dt or "specification" in dt) or ("spec" in name or "specification" in name)
 
 # Lean JSON extractor instructions used ONLY as Responses API instructions
 JSON_EXTRACTOR_INSTRUCTIONS = """
@@ -297,64 +301,39 @@ def optimize_model_parameters(
     Determine optimal model parameters based on drawing type and content.
     """
     content_length = len(raw_content) if raw_content else 0
-    
-    # Detect if this is a schedule OR a specification
-    is_schedule = _is_schedule_or_spec(drawing_type, pdf_path)
-    
-    # Get force mini override status
+    is_schedule = _is_schedule_doc(drawing_type, pdf_path)
     force_mini = get_force_mini_model()
-    
-    # PRIORITY 1: Schedules/specs use appropriate model with sufficient tokens
+
     if is_schedule:
         model = SCHEDULE_MODEL
-        temperature = float(os.getenv("LARGE_MODEL_TEMP", str(LARGE_MODEL_TEMP))) if isinstance(LARGE_MODEL_TEMP, (int, float)) else float(os.getenv("LARGE_MODEL_TEMP", "0.2"))
+        temperature = LARGE_MODEL_TEMP
         max_tokens = min(LARGE_MODEL_MAX_TOKENS, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
         logger.info(f"Using schedule model for {content_length} char document")
-    
-    # PRIORITY 2: Force mini override for non-schedules
     elif force_mini:
         model = DEFAULT_MODEL
-        temperature = float(os.getenv("DEFAULT_MODEL_TEMP", str(DEFAULT_MODEL_TEMP))) if isinstance(DEFAULT_MODEL_TEMP, (int, float)) else float(os.getenv("DEFAULT_MODEL_TEMP", "0.2"))
+        temperature = DEFAULT_MODEL_TEMP
         max_tokens = DEFAULT_MODEL_MAX_TOKENS
         logger.info(f"Force-mini override active ({content_length} chars)")
-    
-    # PRIORITY 3: Size-based selection with optimized model choice
     elif content_length < NANO_CHAR_THRESHOLD:
-        # Use nano for simple classification and basic extraction
         model = TINY_MODEL if TINY_MODEL else DEFAULT_MODEL
-        temperature = float(os.getenv("TINY_MODEL_TEMP", str(TINY_MODEL_TEMP))) if isinstance(TINY_MODEL_TEMP, (int, float)) else float(os.getenv("TINY_MODEL_TEMP", "0.2"))
+        temperature = TINY_MODEL_TEMP if TINY_MODEL else DEFAULT_MODEL_TEMP
         max_tokens = TINY_MODEL_MAX_TOKENS if TINY_MODEL else DEFAULT_MODEL_MAX_TOKENS
         logger.info(f"Using nano model for simple extraction ({content_length} chars)")
-    
     elif content_length < MINI_CHAR_THRESHOLD:
-        # Use mini for structured schedules and repetitive tasks
         model = DEFAULT_MODEL
-        temperature = float(os.getenv("DEFAULT_MODEL_TEMP", str(DEFAULT_MODEL_TEMP))) if isinstance(DEFAULT_MODEL_TEMP, (int, float)) else float(os.getenv("DEFAULT_MODEL_TEMP", "0.2"))
+        temperature = DEFAULT_MODEL_TEMP
         max_tokens = DEFAULT_MODEL_MAX_TOKENS
         logger.info(f"Using mini model for structured extraction ({content_length} chars)")
-    
     else:
-        # Use full model only for complex reasoning and multi-step tasks
         model = LARGE_DOC_MODEL
-        temperature = float(os.getenv("LARGE_MODEL_TEMP", str(LARGE_MODEL_TEMP))) if isinstance(LARGE_MODEL_TEMP, (int, float)) else float(os.getenv("LARGE_MODEL_TEMP", "0.2"))
+        temperature = LARGE_MODEL_TEMP
         max_tokens = LARGE_MODEL_MAX_TOKENS
         logger.info(f"Using full model for complex extraction ({content_length} chars)")
-    
-    # Check if this is a specification document first
-    is_specification = (
-        "spec" in drawing_type.lower() or 
-        "specification" in drawing_type.lower() or
-        "spec" in pdf_path.lower() or 
-        "specification" in pdf_path.lower()
-    )
-    
-    # Special handling for specification documents
-    if is_specification:
+
+    if _is_spec_doc(drawing_type, pdf_path):
         spec_max_tokens = int(os.getenv("SPEC_MAX_TOKENS", "16384"))
         max_tokens = min(max_tokens, spec_max_tokens)
         logger.info(f"Specification document detected - limiting to {max_tokens} tokens")
-    
-    # Token policy for NON-specification documents: keep large outputs reasonable to avoid timeouts
     elif model in [LARGE_DOC_MODEL, SCHEDULE_MODEL]:
         if content_length > 35000:
             max_tokens = min(12000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
@@ -364,27 +343,10 @@ def optimize_model_parameters(
             logger.info(f"Setting max_tokens to {max_tokens} for large document")
         elif content_length > 15000:
             max_tokens = min(15000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
-        # else: use default max_tokens (16384)
-    
-    # Ensure we don't exceed provider limits
-    max_tokens = min(max_tokens, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
-    
-    params = {
-        "model": model,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
 
-    # Log final selection with size bucket info
-    size_bucket = "nano" if content_length < NANO_CHAR_THRESHOLD else \
-                  "mini" if content_length < MINI_CHAR_THRESHOLD else "full"
-    
-    logger.info(
-        f"Model: {params['model']}, Max tokens: {params['max_tokens']}, "
-        f"Input: {content_length} chars"
-    )
-    
-    return params
+    max_tokens = min(max_tokens, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
+    logger.info(f"Model: {model}, Max tokens: {max_tokens}, Input: {content_length} chars")
+    return {"model": model, "temperature": float(temperature), "max_tokens": int(max_tokens)}
 
 
 async def call_with_cache(
@@ -436,31 +398,6 @@ async def call_with_cache(
     save_cache(prompt, params, content)
     
     return content
-
-
-T = TypeVar("T")
-
-
-class AiResponse(Generic[T]):
-    """Response from AI processing."""
-
-    def __init__(
-        self,
-        success: bool = True,
-        content: str = "",
-        parsed_content: Optional[T] = None,
-        error: str = "",
-    ):
-        self.success = success
-        self.content = content
-        self.parsed_content = parsed_content
-        self.error = error
-
-    def __str__(self):
-        if self.success:
-            return f"AiResponse: success={self.success}, content_length={len(self.content) if self.content else 0}"
-        else:
-            return f"AiResponse: success={self.success}, error={self.error}"
 
 
 @time_operation("ai_processing")

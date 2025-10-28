@@ -191,7 +191,9 @@ async def run_ocr_if_needed(
     pdf_path: str,
     current_text: str,
     threshold: int = 1500,
-    max_pages: int = 2
+    max_pages: int = 2,
+    page_count: int | None = None,
+    assume_ocr_needed: bool | None = None,
 ) -> str:
     """
     Intelligent OCR decision based on text density and file characteristics.
@@ -207,22 +209,27 @@ async def run_ocr_if_needed(
     Returns:
         OCR text to append, or empty string
     """
-    # Get page count for intelligent decision making
-    try:
-        with fitz.open(pdf_path) as doc:
-            page_count = len(doc)
-    except Exception as e:
-        logger.warning(f"Could not read PDF for OCR decision: {e}")
-        return ""
-    
-    # Use intelligent OCR trigger logic
-    should_ocr, reason = should_perform_ocr(
-        extracted_text=current_text,
-        pdf_path=pdf_path,
-        page_count=page_count,
-        ocr_enabled=True,  # We only get here if OCR is enabled
-        ocr_threshold=threshold
-    )
+    # Determine page_count once if not provided
+    if page_count is None:
+        try:
+            with fitz.open(pdf_path) as doc:
+                page_count = len(doc)
+        except Exception as e:
+            logger.warning(f"Could not read PDF for OCR decision: {e}")
+            return ""
+
+    # Honor prior OCR decision when provided by caller
+    if assume_ocr_needed is not None:
+        should_ocr = assume_ocr_needed
+        reason = "Pre-decided by caller" if assume_ocr_needed else "Pre-decided skip by caller"
+    else:
+        should_ocr, reason = should_perform_ocr(
+            extracted_text=current_text,
+            pdf_path=pdf_path,
+            page_count=page_count,
+            ocr_enabled=True,  # We only get here if OCR is enabled
+            ocr_threshold=threshold
+        )
     
     if not should_ocr:
         logger.info(f"OCR SKIPPED: {reason}")
