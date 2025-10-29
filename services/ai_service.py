@@ -353,15 +353,24 @@ def optimize_model_parameters(
         spec_max_tokens = int(os.getenv("SPEC_MAX_TOKENS", "16384"))
         max_tokens = min(max_tokens, spec_max_tokens)
         logger.info(f"Specification document detected - limiting to {max_tokens} tokens")
+
+    # Token policy for NON-specification documents
+    # GPT-4.1 models support 32,768 output tokens - use fuller capacity for large schedules
     elif model in [LARGE_DOC_MODEL, SCHEDULE_MODEL]:
-        if content_length > 35000:
-            max_tokens = min(12000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
-            logger.info(f"Capping max_tokens to {max_tokens} for very large document")
+        if content_length > 50000:
+            # Very large multi-panel schedules (e.g., 12-panel drawings)
+            max_tokens = min(28000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
+            logger.info(f"Large multi-panel schedule: setting max_tokens to {max_tokens}")
+        elif content_length > 35000:
+            # Large panel schedules (e.g., 4-panel drawings like E5.00)
+            max_tokens = min(25000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
+            logger.info(f"Multi-panel schedule: setting max_tokens to {max_tokens}")
         elif content_length > 25000:
-            max_tokens = min(14000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
-            logger.info(f"Setting max_tokens to {max_tokens} for large document")
+            max_tokens = min(22000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
+            logger.info(f"Large document: setting max_tokens to {max_tokens}")
         elif content_length > 15000:
-            max_tokens = min(15000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
+            max_tokens = min(20000, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
+        # else: use default max_tokens from config
 
     max_tokens = min(max_tokens, ACTUAL_MODEL_MAX_COMPLETION_TOKENS)
     logger.info(f"Model: {model}, Max tokens: {max_tokens}, Input: {content_length} chars")

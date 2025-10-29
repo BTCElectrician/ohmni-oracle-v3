@@ -71,14 +71,16 @@ MINI_CHAR_THRESHOLD = int(os.getenv("MINI_CHAR_THRESHOLD", "15000"))
 
 # Model-specific parameters (future-proof - no hardcoded model name checks)
 DEFAULT_MODEL_TEMP = float(os.getenv("DEFAULT_MODEL_TEMP", "0.1"))
-DEFAULT_MODEL_MAX_TOKENS = int(os.getenv("DEFAULT_MODEL_MAX_TOKENS", "16000"))
+DEFAULT_MODEL_MAX_TOKENS = int(os.getenv("DEFAULT_MODEL_MAX_TOKENS", "32768"))  # GPT-4.1 limit
 LARGE_MODEL_TEMP = float(os.getenv("LARGE_MODEL_TEMP", "0.1"))
-LARGE_MODEL_MAX_TOKENS = int(os.getenv("LARGE_MODEL_MAX_TOKENS", "16000"))
+LARGE_MODEL_MAX_TOKENS = int(os.getenv("LARGE_MODEL_MAX_TOKENS", "32768"))  # GPT-4.1 limit
 TINY_MODEL_TEMP = float(os.getenv("TINY_MODEL_TEMP", "0.0"))
-TINY_MODEL_MAX_TOKENS = int(os.getenv("TINY_MODEL_MAX_TOKENS", "8000"))
+TINY_MODEL_MAX_TOKENS = int(os.getenv("TINY_MODEL_MAX_TOKENS", "32768"))  # GPT-4.1 Nano also has same limit
 
 # Maximum completion tokens supported by the specific model version being used
-ACTUAL_MODEL_MAX_COMPLETION_TOKENS = int(os.getenv("ACTUAL_MODEL_MAX_COMPLETION_TOKENS", "32000"))
+# GPT-4.1, GPT-4.1 Mini, and GPT-4.1 Nano all support 32,768 output tokens
+# Context window for all variants: ~1 million tokens input
+ACTUAL_MODEL_MAX_COMPLETION_TOKENS = int(os.getenv("ACTUAL_MODEL_MAX_COMPLETION_TOKENS", "32768"))
 
 # API timeouts
 RESPONSES_TIMEOUT_SECONDS = int(os.getenv("RESPONSES_TIMEOUT_SECONDS", "600"))
