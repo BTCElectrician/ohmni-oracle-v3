@@ -52,6 +52,7 @@ distro~=1.9.0
 # Azure (legacy, maintaining for backward compatibility)
 azure-ai-documentintelligence==1.0.0
 azure-core>=1.32.0
+azure-storage-blob~=12.24.0
 
 # Testing
 pytest~=7.4.0

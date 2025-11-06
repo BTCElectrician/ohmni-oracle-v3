@@ -94,6 +94,15 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templat
 # Additional configuration settings
 DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
 
+# Original document storage configuration
+ORIGINAL_STORAGE_BACKEND = os.getenv("ORIGINAL_STORAGE_BACKEND", "filesystem").lower()
+ORIGINAL_STORAGE_PREFIX = os.getenv("ORIGINAL_STORAGE_PREFIX", "source-documents").strip("/")
+AZURE_BLOB_CONNECTION_STRING = os.getenv("AZURE_BLOB_CONNECTION_STRING")
+AZURE_BLOB_ACCOUNT_URL = os.getenv("AZURE_BLOB_ACCOUNT_URL")
+AZURE_BLOB_CREDENTIAL = os.getenv("AZURE_BLOB_CREDENTIAL")
+AZURE_BLOB_SAS_TOKEN = os.getenv("AZURE_BLOB_SAS_TOKEN")
+AZURE_BLOB_CONTAINER = os.getenv("AZURE_BLOB_CONTAINER", "construction-drawings")
+
 
 def get_all_settings() -> Dict[str, Any]:
     return {
@@ -127,6 +136,13 @@ def get_all_settings() -> Dict[str, Any]:
         "OCR_ENABLED": OCR_ENABLED,
         "OCR_THRESHOLD": OCR_THRESHOLD,
         "OCR_MAX_PAGES": OCR_MAX_PAGES,
+        "ORIGINAL_STORAGE_BACKEND": ORIGINAL_STORAGE_BACKEND,
+        "ORIGINAL_STORAGE_PREFIX": ORIGINAL_STORAGE_PREFIX,
+        "AZURE_BLOB_CONNECTION_STRING": "***REDACTED***" if AZURE_BLOB_CONNECTION_STRING else None,
+        "AZURE_BLOB_ACCOUNT_URL": AZURE_BLOB_ACCOUNT_URL,
+        "AZURE_BLOB_CREDENTIAL": "***REDACTED***" if AZURE_BLOB_CREDENTIAL else None,
+        "AZURE_BLOB_SAS_TOKEN": "***REDACTED***" if AZURE_BLOB_SAS_TOKEN else None,
+        "AZURE_BLOB_CONTAINER": AZURE_BLOB_CONTAINER,
     }
 
 # Apply dynamic levels to pipeline modules
