@@ -145,11 +145,13 @@ async def process_job_site_async(job_folder: str, output_folder: str, client) ->
         client: OpenAI client
     """
     logger = logging.getLogger(__name__)
+    job_folder = os.path.abspath(job_folder)
+    output_folder = os.path.abspath(output_folder)
 
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    pdf_files = traverse_job_folder(job_folder)
+    pdf_files = traverse_job_folder(job_folder, exclude_paths=[output_folder])
     logger.info(f"📁 Found {len(pdf_files)} PDF files to process")
 
     if not pdf_files:

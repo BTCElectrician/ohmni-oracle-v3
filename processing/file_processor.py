@@ -35,6 +35,7 @@ from config.settings import (
     AZURE_BLOB_CREDENTIAL,
     AZURE_BLOB_SAS_TOKEN,
     AZURE_BLOB_CONTAINER,
+    FORCE_PANEL_OCR,
 )
 
 
@@ -298,6 +299,19 @@ class FileProcessingPipeline:
             ocr_enabled=OCR_ENABLED,
             ocr_threshold=OCR_THRESHOLD
         )
+
+        is_panel_schedule_doc = (
+            "panel" in self.file_name.lower()
+            or "panel" in drawing_type
+            or "panel" in (self.processing_state.get("subtype") or "").lower()
+        )
+        if FORCE_PANEL_OCR and OCR_ENABLED and is_panel_schedule_doc:
+            if not should_ocr:
+                self.logger.info(
+                    "FORCE_PANEL_OCR enabled – overriding OCR decision for panel schedule document"
+                )
+            should_ocr = True
+            decision_reason = "FORCE_PANEL_OCR override for panel schedule"
         
         # Create enhanced OCR decision metrics
         ocr_decision_metrics = {
@@ -310,7 +324,8 @@ class FileProcessingPipeline:
             "drawing_type": drawing_type,
             "expected_chars_per_page": expected_chars_per_page,
             "ocr_enabled": OCR_ENABLED,
-            "should_ocr": should_ocr
+            "should_ocr": should_ocr,
+            "force_panel_ocr": FORCE_PANEL_OCR and is_panel_schedule_doc,
         }
         
         self.logger.info(f"🔍 OCR Analysis: {current_chars} chars total ({chars_per_page:.0f}/page), threshold={OCR_THRESHOLD}/page, decision='{decision_reason}'")

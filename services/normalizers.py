@@ -4,10 +4,167 @@ Extracted from file_processor.py to reduce complexity.
 """
 import re
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from utils.performance_utils import time_operation_context
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_int(value: Any) -> Optional[int]:
+    """Convert various value types to int if possible."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        try:
+            return int(value)
+        except Exception:
+            return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        match = re.search(r"-?\d+", stripped)
+        if match:
+            try:
+                return int(match.group(0))
+            except Exception:
+                return None
+    return None
+
+
+def _extract_panel_circuit_number(data: Dict[str, Any]) -> Optional[int]:
+    """Locate a circuit number from common key variations."""
+    if not isinstance(data, dict):
+        return None
+    circuit_keys = [
+        "circuit_number",
+        "circuit",
+        "ckt",
+        "circuit_no",
+        "no",
+        "#",
+        "number",
+        "branch",
+        "cct",
+        "cct_no",
+    ]
+    for key in circuit_keys:
+        if key in data:
+            num = _safe_int(data.get(key))
+            if num is not None:
+                return num
+    return None
+
+
+def _normalize_phase_loads(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Return consistent phase load dict (A/B/C)."""
+    if not isinstance(data, dict):
+        return {"A": None, "B": None, "C": None}
+
+    phase_loads = data.get("phase_loads")
+    if isinstance(phase_loads, dict):
+        return {
+            "A": phase_loads.get("A"),
+            "B": phase_loads.get("B"),
+            "C": phase_loads.get("C"),
+        }
+
+    return {
+        "A": data.get("A") or data.get("va_phase_a"),
+        "B": data.get("B") or data.get("va_phase_b"),
+        "C": data.get("C") or data.get("va_phase_c"),
+    }
+
+
+def _normalize_panel_side_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize a single side (left/right) of a panel schedule row."""
+    if not isinstance(data, dict):
+        return {
+            "circuit_number": None,
+            "load_classification": None,
+            "load_name": None,
+            "trip": None,
+            "poles": None,
+            "phase_loads": {"A": None, "B": None, "C": None},
+        }
+
+    circuit_number = _extract_panel_circuit_number(data)
+    load_name = data.get("load_name") or data.get("description") or data.get("load")
+    trip = data.get("trip") or data.get("breaker") or data.get("amps")
+    poles = data.get("poles") or data.get("pole") or data.get("phases")
+
+    normalized = {
+        "circuit_number": circuit_number,
+        "load_classification": data.get("load_classification")
+        or data.get("classification"),
+        "load_name": load_name,
+        "trip": str(trip).strip() if isinstance(trip, str) else trip,
+        "poles": _safe_int(poles) if poles is not None else None,
+        "phase_loads": _normalize_phase_loads(data),
+    }
+    return normalized
+
+
+def _normalize_panels_list_entry(entry: Any, panel_name: str, index: int) -> Dict[str, Any]:
+    """Normalize entries under ELECTRICAL.panels[].circuits."""
+    if not isinstance(entry, dict):
+        logger.warning(
+            f"Unexpected panel circuit entry type in panel '{panel_name}' index {index}: {entry}"
+        )
+        return {
+            "circuit_number": None,
+            "load_classification": None,
+            "load_name": None,
+            "trip": None,
+            "poles": None,
+            "phase_loads": {"A": None, "B": None, "C": None},
+            "right_side": _normalize_panel_side_data({}),
+        }
+
+    # Case 1: Newer structure with explicit left/right objects
+    if "left" in entry or "right" in entry:
+        left_side = _normalize_panel_side_data(entry.get("left") or {})
+        right_side = _normalize_panel_side_data(entry.get("right") or {})
+
+        # If left side missing but right present, swap to keep numbering intact
+        if (
+            left_side.get("circuit_number") is None
+            and right_side.get("circuit_number") is not None
+        ):
+            left_side, right_side = right_side, _normalize_panel_side_data({})
+
+        normalized = {
+            "circuit_number": left_side.get("circuit_number"),
+            "load_classification": left_side.get("load_classification"),
+            "load_name": left_side.get("load_name"),
+            "trip": left_side.get("trip"),
+            "poles": left_side.get("poles"),
+            "phase_loads": left_side.get("phase_loads"),
+            "right_side": right_side,
+        }
+        return normalized
+
+    # Case 2: Already in expected structure
+    normalized = entry.copy()
+
+    if "phase_loads" not in normalized or not isinstance(
+        normalized.get("phase_loads"), dict
+    ):
+        normalized["phase_loads"] = _normalize_phase_loads(normalized)
+
+    if "right_side" in normalized:
+        normalized["right_side"] = _normalize_panel_side_data(
+            normalized.get("right_side") or {}
+        )
+    else:
+        normalized["right_side"] = _normalize_panel_side_data({})
+
+    if normalized.get("circuit_number") is None:
+        normalized["circuit_number"] = _extract_panel_circuit_number(normalized)
+
+    return normalized
 
 
 def _normalize_single_circuit(
@@ -302,6 +459,31 @@ def normalize_panel_fields(parsed_json: Dict[str, Any]) -> Dict[str, Any]:
 
     # Additional validation and correction
     _validate_panel_structure(electrical)
+
+    # Also handle ELECTRICAL.panels (alternate structure used elsewhere)
+    try:
+        panels = electrical.get("panels")
+        if isinstance(panels, list):
+            for panel in panels:
+                if not isinstance(panel, dict):
+                    continue
+                circuits = panel.get("circuits")
+                if isinstance(circuits, list):
+                    panel_name = panel.get("panel_name", "UnknownPanel")
+                    normalized_circuits = []
+                    for i, entry in enumerate(circuits):
+                        normalized_circuits.append(
+                            _normalize_panels_list_entry(entry, panel_name, i)
+                        )
+
+                    def _sort_key(row: Dict[str, Any]) -> int:
+                        num = row.get("circuit_number")
+                        parsed = _safe_int(num)
+                        return parsed if parsed is not None else 10**9
+
+                    panel["circuits"] = sorted(normalized_circuits, key=_sort_key)
+    except Exception as e:
+        logger.debug(f"Panel list post-processing note: {e}")
 
     return parsed_json
 

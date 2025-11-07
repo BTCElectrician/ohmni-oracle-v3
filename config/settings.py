@@ -38,6 +38,7 @@ MAX_CONCURRENT_API_CALLS = int(os.getenv("MAX_CONCURRENT_API_CALLS", "20"))
 OCR_ENABLED = os.getenv("OCR_ENABLED", "true").lower() == "true"
 OCR_THRESHOLD = int(os.getenv("OCR_THRESHOLD", "1500"))  # Characters per page threshold (not total)
 OCR_MAX_PAGES = int(os.getenv("OCR_MAX_PAGES", "2"))
+FORCE_PANEL_OCR = os.getenv("FORCE_PANEL_OCR", "false").lower() == "true"
 
 # Model Selection Configuration - Define as a function to reload each time
 def get_force_mini_model():
@@ -136,6 +137,7 @@ def get_all_settings() -> Dict[str, Any]:
         "OCR_ENABLED": OCR_ENABLED,
         "OCR_THRESHOLD": OCR_THRESHOLD,
         "OCR_MAX_PAGES": OCR_MAX_PAGES,
+        "FORCE_PANEL_OCR": FORCE_PANEL_OCR,
         "ORIGINAL_STORAGE_BACKEND": ORIGINAL_STORAGE_BACKEND,
         "ORIGINAL_STORAGE_PREFIX": ORIGINAL_STORAGE_PREFIX,
         "AZURE_BLOB_CONNECTION_STRING": "***REDACTED***" if AZURE_BLOB_CONNECTION_STRING else None,
