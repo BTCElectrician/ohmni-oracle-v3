@@ -34,19 +34,38 @@ Core disciplines supported:
 
 Ohmni Oracle v3 has been optimized for production workloads through systematic refactoring and code cleanup.
 
-### Current Benchmarks (October 2025)
+### Current Benchmarks (November 2025 - v3.1.1)
 
 | Metric | Performance | Details |
 |--------|-------------|---------|
-| **Average Processing Time** | 72 seconds per file | End-to-end: extraction → AI processing → JSON output |
-| **API Request Time** | 35 seconds per file | ~93% of total processing time |
-| **Large Schedule Files** | 120-160 seconds | Panel schedules, mechanical schedules, specifications |
-| **Simple Drawings** | 20-48 seconds | Floor plans, details, equipment elevations |
+| **Average Processing Time** | 87 seconds per file | End-to-end: extraction → AI processing → JSON output |
+| **API Request Time** | 41 seconds per file | ~88% of total processing time |
+| **Tokens per Second** | 69.74 tokens/sec | Average API throughput |
+| **Large Schedule Files** | 124-161 seconds | Panel schedules, mechanical schedules |
+| **Simple Drawings** | 8-64 seconds | Floor plans, details, equipment elevations |
 | **OCR Processing** | 10-16 seconds per page | Triggered only for scanned/low-text drawings |
 
 ### Optimization History
 
-**October 28, 2025 Refactoring:**
+**v3.1.1 - November 9, 2025 (Current Stable Baseline):**
+- **Production stable** with AI search index integration
+- **9 operations** processed across 17 API requests
+- **Most used model:** `gpt-4.1-mini` (33,944 total completion tokens)
+- **Key metrics:**
+  - Total processing: 86.80s average
+  - AI Processing: 76.61s average
+  - Extraction: 7.17s average
+  - JSON Parsing: 1.09s average
+
+**Performance by Drawing Type:**
+- Plumbing: 106.89s average (AI processing)
+- Electrical: 106.22s average (AI processing)
+- Mechanical: 87.97s average (AI processing)
+- Architectural: 64.24s average (AI processing)
+- Technology: 15.23s average (AI processing)
+- Equipment: 8.52s average (AI processing)
+
+**October 28, 2025 Refactoring (v3.1.0):**
 - **33.5% faster** end-to-end processing (108s → 72s per file)
 - **36.0% faster** API requests (55s → 35s per file)
 - **Removed 268 net lines** of dead code and redundancy

@@ -1,12 +1,100 @@
 {
     "room_id": "",
     "room_name": "",
-    "walls": {
-      "north": "",
-      "south": "",
-      "east": "",
-      "west": ""
-    },
+    "sheet_number": "",
+    "levels": [],
+    "occupancy_type": "",
+    "template_status": "in_progress",
+    "template_author": "",
+    "template_last_modified": "",
+    "dimensions": "",
+    "square_footage": 0,
     "ceiling_height": "",
-    "dimensions": ""
+    "floor_to_floor_height": "",
+    "walls": {
+        "north": "",
+        "south": "",
+        "east": "",
+        "west": "",
+        "interior_partitions": [],
+        "notes": ""
+    },
+    "wall_details": {
+        "fire_rating": "",
+        "stc_rating": "",
+        "stud_type": "",
+        "insulation": ""
+    },
+    "doors": {
+        "count": 0,
+        "door_numbers": [],
+        "types": [],
+        "hardware_sets": [],
+        "fire_rated": [],
+        "access_control": []
+    },
+    "windows": {
+        "count": 0,
+        "types": [],
+        "sizes": [],
+        "blinds_shades": ""
+    },
+    "finishes": {
+        "floor": {"material": "", "color_pattern": "", "base": ""},
+        "walls": {"material": "", "color_pattern": "", "wainscot": "", "corner_guards": false},
+        "ceiling": {"type": "", "grid": "", "height": "", "material": "", "access_panels": 0}
+    },
+    "casework": {
+        "base_cabinets": false,
+        "wall_cabinets": false,
+        "countertop_material": "",
+        "sink": false,
+        "linear_feet": 0
+    },
+    "specialties": {
+        "toilet_accessories": [],
+        "signage": [],
+        "whiteboards": 0,
+        "mirrors": 0,
+        "grab_bars": 0,
+        "shelving": []
+    },
+    "accessibility": {
+        "ada_required": false,
+        "accessible_route": false,
+        "turning_radius": false
+    },
+    "fire_life_safety": {
+        "fire_rating_required": false,
+        "rating": "",
+        "fire_dampers": 0,
+        "smoke_dampers": 0,
+        "occupancy_classification": ""
+    },
+    "acoustics": {
+        "stc_requirement": "",
+        "sound_masking": false,
+        "acoustic_treatment": ""
+    },
+    "hvac": {
+        "diffusers": {"supply": 0, "return": 0, "exhaust": 0},
+        "thermostats": {"count": 0, "type": "", "locations": []},
+        "vav_boxes": 0
+    },
+    "plumbing": {
+        "fixtures": [],
+        "fixture_count": {},
+        "floor_drains": 0,
+        "water_heater": false
+    },
+    "special_rooms": {
+        "clean_room": {"classification": "", "wall_system": "", "pass_throughs": 0},
+        "lab": {"casework_type": "", "fume_hood": false, "biosafety_cabinet": false},
+        "food_service": {"quarry_tile": false, "frf_walls": false, "hood_system": false},
+        "data_center": {"raised_floor": false, "raised_floor_height": "", "containment_system": ""},
+        "operating_room": {"or_number": "", "size": "", "surgical_lights": 0, "booms": 0}
+    },
+    "discrepancies": [],
+    "field_notes": "",
+    "photos": []
 }

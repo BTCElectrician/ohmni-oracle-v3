@@ -39,6 +39,7 @@ This is the complete drop-in package.
   * The `query_playbook.py` script provides a simple developer test to verify the data load. The *real* query logic (the "facts-first, sheets-fallback" pattern) will be implemented in your existing Azure Function.
   * The one-index design (`drawings_unified`) remains required. `doc_type` partitions sheets vs. row facts vs. templates.
   * Load `synonyms.seed.json` into an Azure AI Search synonym map and attach it to the searchable fields (a one-time setup).
+  * Basic tier ($75/mo) supports semantic ranking (1K semantic queries/month free), hybrid vector search, scoring profiles, facets, suggesters, and synonym maps. Fresh embeddings via `text-embedding-3-large` run about $0.13 per million tokens, so even big refreshes stay well under $1.
   * **Template JSON** (electrical + architectural) now rides the same deterministic pipeline: copy the filled templates into the run folder and pass `--templates-root` to `transform.py` so each index refresh includes the foreman-authored truth.
   * Bake the `README.md` + `pytest` from this folder into the PRD acceptance criteria so anyone can follow the runbook and CI can catch regressions.
 
@@ -46,7 +47,11 @@ This is the complete drop-in package.
 
 ## 3\) Mandatory template inputs (`templates/e_rooms_template.json`, `templates/a_rooms_template.json`)
 
-  * These two base templates live in `templates/` and must be duplicated for **every** floor-plan sheet the moment OCR hands us a layout. They are the human-in-the-loop source of truth until CV models can infer every device on a sheet, so do not treat them as optional sidecars.
+  * These two base templates live in `templates/` and serve as scaffolds for room-by-room data collection.
+  * **Electrical template (`e_rooms_template.json`)** is comprehensive and tracks: circuits (lighting/power/emergency/critical/UPS), light fixtures, outlets (regular/controlled/GFCI/USB/hospital-grade), switches, fire alarm devices (smoke/heat detectors, pull stations, horn/strobes), data/telecom (data outlets, wireless AP), security (cameras, card readers, panic buttons), audiovisual (displays, projectors, speakers, control panels), nurse call (stations, pull cords, dome lights, code blue), medical gas (O2, vacuum, medical air, WAGD), lab systems (fume hoods, biosafety cabinets, emergency showers), data center (racks, PDUs, cooling, EPO), and kitchen systems (hood suppression, grease trap alarms).
+  * **Architectural template (`a_rooms_template.json`)** is comprehensive and tracks: dimensions, walls (by orientation with fire/STC ratings), doors/windows, finishes (floor/wall/ceiling with materials and colors), casework, specialties (toilet accessories, signage, whiteboards, grab bars), accessibility (ADA compliance), fire/life safety (ratings, dampers, occupancy classification), acoustics (STC requirements, sound masking), HVAC integration (diffusers, thermostats, VAV boxes), plumbing fixtures, and special room configurations (clean rooms, labs, food service, data centers, operating rooms).
+  * During floor plan processing, your script auto-generates one electrical + one architectural JSON file per detected room. Foremen then populate these pre-generated files with actual device counts, fixture info, and finish details using voice/chatbot interface.
+  * They are the human-in-the-loop source of truth until CV models can infer every device on a sheet, so do not treat them as optional sidecars.
   * For each run, copy the electrical template to a job-scoped folder such as `processing/<project>/templates/electrical/<sheet>/<room>.json` and do the same for the architectural template (`.../architectural/...`). Foremen fill these JSON files directly; version them in Git/LFS or sync them from the field tablets so nothing lives only on one laptop.
   * The processing script must pass the root of those filled-in templates to `transform.py` so we can emit template docs alongside sheets and row-facts. When a foreman edits a template, rerun the emitter (or the incremental sync described later) to merge the update.
   * The template schema stays intentionally loose: you can add as many keys as you need (new fixture counts, specialty devices, finish notes, etc.) without changing the search index schema each time. We snapshot the full JSON body into `template_payload` while also surfacing the high-signal fields for filtering.
@@ -85,9 +90,9 @@ This is the complete drop-in package.
   "template_status": "in_progress",
   "template_author": "jfernandez",
   "template_last_modified": "2025-02-12T09:14:00Z",
-  "template_tags": ["lighting", "outlets", "kitchen"],
-  "content": "Unit A4 Kitchen — Lighting circuits L47/L48, 6 receptacles (2 controlled), DW and range noted",
-  "template_payload": "{\"room_id\":\"A4\",\"room_name\":\"Unit A4 Kitchen\",...}"
+  "template_tags": ["lighting", "outlets", "gfci", "appliances", "fire_alarm", "data"],
+  "content": "A4 Electrical — Lighting: L47, L48, 10 outlets, 1 FA devices, 6 data (in_progress)",
+  "template_payload": "{\"room_id\":\"A4\",\"room_name\":\"Unit A4 Kitchen\",\"sheet_number\":\"E2.03\",\"levels\":[\"Level 2\"],\"template_status\":\"in_progress\",\"circuits\":{\"lighting\":[\"L47\",\"L48\"],\"power\":[\"P12\"],\"emergency\":[]},\"light_fixtures\":{\"fixture_ids\":[\"A\",\"B\"],\"fixture_count\":{\"A\":2,\"B\":2}},\"outlets\":{\"regular_outlets\":6,\"controlled_outlets\":2,\"gfci_outlets\":2},\"appliances\":[\"DW\",\"Range\"],\"fire_alarm\":{\"smoke_detectors\":{\"count\":1,\"type\":\"photoelectric\",\"locations\":[\"ceiling\"]},\"horn_strobes\":{\"count\":0}},\"data_telecom\":{\"data_outlets\":6,\"wireless_ap\":false},\"discrepancies\":[],\"field_notes\":\"\"}"
 }
 ```
 
@@ -97,7 +102,7 @@ The `content` field stays a short, human-readable summary (used by Search and th
 
 ## 4\) `tools/schedule_postpass/unified_index.schema.json`
 
-> Name your index e.g. `drawings_unified`. This carries **sheets**, **facts**, and **templates**. Replace `YOUR_EMBEDDING_DIM` with your model’s dimension (e.g., 3072 for `text-embedding-3-large`).
+> Name your index e.g. `drawings_unified`. This carries **sheets**, **facts**, and **templates**. The embedding dimension is locked to 3072 for `text-embedding-3-large`.
 
 ```json
 {
@@ -109,19 +114,19 @@ The `content` field stays a short, human-readable summary (used by Search and th
     /* TEMPLATE metadata */
     {"name":"template_type","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
     {"name":"template_id","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
-    {"name":"room_id","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-    {"name":"room_name","type":"Edm.String","searchable":true,"filterable":true,"sortable":false,"facetable":false},
+    {"name":"room_id","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+    {"name":"room_name","type":"Edm.String","searchable":true,"filterable":true,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
     {"name":"template_status","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
     {"name":"template_author","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
     {"name":"template_last_modified","type":"Edm.DateTimeOffset","searchable":false,"filterable":true,"sortable":true,"facetable":false},
-    {"name":"template_tags","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true},
-    {"name":"template_payload","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},
+    {"name":"template_tags","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true,"synonymMaps":["project-synonyms"]},
+    {"name":"template_payload","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
 
-    {"name":"project","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"project","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
     {"name":"project_id","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
 
-    {"name":"sheet_number","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-    {"name":"sheet_title","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},
+    {"name":"sheet_number","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+    {"name":"sheet_title","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
     {"name":"discipline","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
 
     {"name":"revision","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
@@ -132,30 +137,30 @@ The `content` field stays a short, human-readable summary (used by Search and th
     {"name":"source_file","type":"Edm.String","searchable":false,"filterable":false,"sortable":false,"facetable":false},
 
     /* SHEET/TEMPLATE/FACT content */
-    {"name":"content","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},
-    {"name":"content_vector","type":"Collection(Edm.Single)","searchable":true,"dimensions":YOUR_EMBEDDING_DIM,"vectorSearchProfile":"vprof","filterable":false,"sortable":false,"facetable":false},
+    {"name":"content","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+    {"name":"content_vector","type":"Collection(Edm.Single)","searchable":true,"dimensions":3072,"vectorSearchProfile":"vprof","filterable":false,"sortable":false,"facetable":false},
 
     /* FACT fields */
     {"name":"schedule_type","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
 
     {"name":"key","type":"Edm.ComplexType","fields":[
-      {"name":"panel","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"circuit","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"unit","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"tag","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"wall_type","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"fixture_type","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"door_number","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"ceiling_type","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true}
+      {"name":"panel","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"circuit","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"unit","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"tag","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"wall_type","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"fixture_type","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"door_number","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"ceiling_type","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]}
     ]},
 
     {"name":"attributes","type":"Edm.ComplexType","fields":[
-      {"name":"description","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},
+      {"name":"description","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
       {"name":"voltage","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
       {"name":"phase","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
       {"name":"rating_a","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
-      {"name":"wire","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},
-      {"name":"conduit","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},
+      {"name":"wire","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+      {"name":"conduit","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
       {"name":"hp","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
       {"name":"kw","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
       {"name":"kva","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
@@ -163,39 +168,39 @@ The `content` field stays a short, human-readable summary (used by Search and th
       {"name":"mop","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
       {"name":"fla","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
       {"name":"busbar_a","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
-      {"name":"disconnect","type":"Edm.String","searchable":true,"filterable":true,"sortable":false,"facetable":true},
-      {"name":"panel","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"circuit","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
+      {"name":"disconnect","type":"Edm.String","searchable":true,"filterable":true,"sortable":false,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"panel","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"circuit","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
       
       {"name":"lumens","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
-      {"name":"lamp_type","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"cct","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"cri","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"mounting","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"dimming","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
+      {"name":"lamp_type","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"cct","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"cri","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"mounting","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"dimming","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
       
       {"name":"stc","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
-      {"name":"fire_rating","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"stud_gauge","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},
-      {"name":"layers","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},
+      {"name":"fire_rating","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"stud_gauge","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+      {"name":"layers","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
       
       {"name":"ceiling_height_in","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
-      {"name":"finish_floor","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"finish_wall","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"finish_ceiling","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"acoustic","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},
-      {"name":"grid","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},
+      {"name":"finish_floor","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"finish_wall","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"finish_ceiling","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"acoustic","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+      {"name":"grid","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
 
-      {"name":"hardware_set","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true},
-      {"name":"size","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},
-      {"name":"material_frame","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},
+      {"name":"hardware_set","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"size","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+      {"name":"material_frame","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
 
       {"name":"btu","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
       {"name":"gpm","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
       {"name":"head","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false}
     ]},
 
-    {"name":"labels","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+    {"name":"labels","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true,"synonymMaps":["project-synonyms"]},
     {"name":"source_bbox","type":"Collection(Edm.Double)","searchable":false,"filterable":false,"sortable":false,"facetable":false}
   ],
   "vectorSearch": {
@@ -211,7 +216,11 @@ The `content` field stays a short, human-readable summary (used by Search and th
       }
     }]
   },
-  "suggesters": [],
+  "suggesters": [{
+    "name": "sg",
+    "searchMode": "analyzingInfixMatching",
+    "sourceFields": ["sheet_number","sheet_title","room_id","room_name","key/panel","key/tag"]
+  }],
   "scoringProfiles": [{
     "name":"freshness_boost",
     "functions":[{"type":"freshness","fieldName":"revision_date","interpolation":"quadratic","boost":1.2,"freshness":{"boostingDuration":"P365D"}}]
@@ -245,8 +254,9 @@ python tools/schedule_postpass/transform.py \
 
 ```python
 #!/usr/bin/env python3
-import json, sys, pathlib, csv
-from typing import Dict, Any, Iterable, List
+import json, sys, pathlib, csv, logging
+from typing import Dict, Any, Iterable, List, Optional
+from openai import OpenAI
 from parsers import (
     classify_schedule_block, extract_key, extract_attributes, build_summary,
     build_template_summary, derive_template_tags
@@ -256,6 +266,25 @@ import argparse
 from datetime import datetime, timezone
 
 PROJECT_ID_DEFAULT = "veridian"
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def generate_embedding(text: str, client: Optional[OpenAI]) -> Optional[List[float]]:
+    """Generate a vector embedding for hybrid search."""
+    if not client or not text:
+        return None
+    trimmed = text.strip()
+    if not trimmed:
+        return None
+    try:
+        resp = client.embeddings.create(
+            model="text-embedding-3-large",
+            input=trimmed
+        )
+        return resp.data[0].embedding
+    except Exception as exc:
+        logger.warning(f"Embedding generation failed (skipping vector): {exc}")
+        return None
 
 def load_json(p: pathlib.Path) -> Dict[str, Any]:
     with p.open("r", encoding="utf-8") as f:
@@ -275,7 +304,7 @@ def sheet_meta(raw: Dict[str, Any], project_id: str) -> Dict[str, Any]:
         "content": raw.get("content", ""),
     }
 
-def make_sheet_doc(meta: Dict[str, Any], raw_json: Dict[str, Any]) -> Dict[str, Any]:
+def make_sheet_doc(meta: Dict[str, Any], raw_json: Dict[str, Any], client: Optional[OpenAI] = None) -> Dict[str, Any]:
     return {
         "id": f"{meta['project_id']}|{meta['sheet_number']}|{meta['revision']}",
         "doc_type": "sheet",
@@ -307,7 +336,7 @@ def stable_key(schedule_type: str, key_obj: Dict[str, Any]) -> str:
         parts.append(f"{k}-{v}")
     return "_".join(parts)
 
-def emit_facts(raw_json: Dict[str, Any], meta: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
+def emit_facts(raw_json: Dict[str, Any], meta: Dict[str, Any], client: Optional[OpenAI] = None) -> Iterable[Dict[str, Any]]:
     blocks = raw_json.get("blocks", [])
     for blk in blocks:
         stype = classify_schedule_block(blk)
@@ -345,7 +374,8 @@ def emit_facts(raw_json: Dict[str, Any], meta: Dict[str, Any]) -> Iterable[Dict[
 
 
 def iter_template_docs(template_root: pathlib.Path,
-                       base_meta: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
+                       base_meta: Dict[str, Any],
+                       client: Optional[OpenAI] = None) -> Iterable[Dict[str, Any]]:
     """Iterates through all template JSON files and yields template documents."""
     for path in sorted(template_root.rglob("*.json")):
         try:
@@ -447,6 +477,12 @@ def main():
     project_id = args.project_id
     template_root = args.templates_root
 
+    try:
+        embedding_client = OpenAI()
+    except Exception as exc:
+        print(f"Warning: Unable to initialize OpenAI client ({exc}). Embeddings disabled.", file=sys.stderr)
+        embedding_client = None
+
     out_dir.mkdir(parents=True, exist_ok=True)
     sheets_jsonl = out_dir / "sheets.jsonl"
     facts_jsonl  = out_dir / "facts.jsonl"
@@ -469,8 +505,10 @@ def main():
         for p in sorted(in_dir.rglob("*.json")):
             raw = load_json(p)
             meta = sheet_meta(raw, project_id)
-            sheet_doc = make_sheet_doc(meta, raw)
-            facts = list(emit_facts(raw, meta))
+            sheet_doc = make_sheet_doc(meta, raw, embedding_client)
+            if (vector := generate_embedding(sheet_doc.get("content", ""), embedding_client)):
+                sheet_doc["content_vector"] = vector
+            facts = list(emit_facts(raw, meta, embedding_client))
             
             # Find templates related to this sheet for coverage report
             # This is a simplification; a more robust approach links them via a manifest or direct path
@@ -479,10 +517,10 @@ def main():
                 # Assuming templates are structured like: templates_root/<discipline>/<sheet_number>/<room>.json
                 sheet_template_dir = template_root / "electrical" / meta['sheet_number']
                 if sheet_template_dir.exists():
-                    sheet_templates.extend(list(iter_template_docs(sheet_template_dir, meta)))
+                    sheet_templates.extend(list(iter_template_docs(sheet_template_dir, meta, embedding_client)))
                 sheet_template_dir = template_root / "architectural" / meta['sheet_number']
                 if sheet_template_dir.exists():
-                    sheet_templates.extend(list(iter_template_docs(sheet_template_dir, meta)))
+                    sheet_templates.extend(list(iter_template_docs(sheet_template_dir, meta, embedding_client)))
             except Exception as e:
                 print(f"Error checking templates for sheet {meta['sheet_number']}: {e}", file=sys.stderr)
             
@@ -504,7 +542,7 @@ def main():
     print("Processing templates...")
     if args.templates_only:
         # If templates-only, we process all templates in the root and re-create all_templates
-        all_templates = list(iter_template_docs(template_root, base_meta))
+        all_templates = list(iter_template_docs(template_root, base_meta, embedding_client))
         # Re-calculate coverage for templates-only mode (simplified: one row for all templates)
         if all_templates:
             # Group templates by sheet_number to produce meaningful coverage rows
@@ -740,46 +778,190 @@ def build_summary(stype: str, key: Dict[str, Any], a: Dict[str, Any]) -> str:
 # --- New Template Functions ---
 
 def build_template_summary(template_type: str, raw: Dict[str, Any]) -> str:
-    """Creates a short, human-readable summary for a template doc's 'content' field."""
+    """Creates a short, human-readable summary for a template doc's 'content' field.
+    Handles comprehensive template structure with all systems."""
     room_id = raw.get("room_id") or raw.get("room_name", "Space")
     status = raw.get("template_status", "in_progress")
-    author = raw.get("template_author", "Foreman")
     
     if template_type == "electrical":
-        # Example: Unit A4 Kitchen — Lighting circuits L47/L48, 6 receptacles (2 controlled), DW and range noted
-        lighting_circuits = raw.get("lighting_circuits", "N/A")
-        receptacle_count = raw.get("receptacle_count", "N/A")
-        appliances = raw.get("appliances", [])
-        appliance_str = ", ".join(appliances) if appliances else "None noted"
-        return f"{room_id} Electrical — Lighting: {lighting_circuits}, Receptacles: {receptacle_count}, Appliances: {appliance_str} ({status})"
+        parts = []
+        
+        # Circuits
+        circuits = raw.get("circuits", {})
+        lighting = circuits.get("lighting", [])
+        if lighting:
+            parts.append(f"Lighting: {', '.join(lighting[:3])}{'...' if len(lighting) > 3 else ''}")
+        
+        # Outlets
+        outlets = raw.get("outlets", {})
+        total = sum([outlets.get("regular_outlets", 0), outlets.get("controlled_outlets", 0),
+                     outlets.get("gfci_outlets", 0), outlets.get("usb_outlets", 0)])
+        if total > 0:
+            parts.append(f"{total} outlets")
+        
+        # Fire Alarm
+        fa = raw.get("fire_alarm", {})
+        fa_devices = sum([fa.get(k, {}).get("count", 0) for k in ["smoke_detectors", "heat_detectors", "pull_stations", "horn_strobes"]])
+        if fa_devices > 0:
+            parts.append(f"{fa_devices} FA devices")
+        
+        # Data/Telecom
+        dt = raw.get("data_telecom", {})
+        data_count = dt.get("data_outlets", 0)
+        if data_count > 0:
+            parts.append(f"{data_count} data")
+        
+        # Special Systems
+        if raw.get("nurse_call", {}).get("stations", {}).get("count", 0) > 0:
+            parts.append("nurse call")
+        if raw.get("medical_gas", {}).get("oxygen", {}).get("count", 0) > 0:
+            parts.append("medical gas")
+        if raw.get("security", {}).get("cameras", {}).get("count", 0) > 0:
+            parts.append("security")
+        
+        summary = f"{room_id} Electrical — " + ", ".join(parts) if parts else f"{room_id} Electrical (empty)"
+        return f"{summary} ({status})"
     
     if template_type == "architectural":
-        # Example: Unit A4 Kitchen — Finish Floor: CT-2, Wall: PT-1, Ceiling: ACT-3 (Signed Off)
-        floor = raw.get("finish_floor", "N/A")
-        wall = raw.get("finish_wall", "N/A")
-        ceiling = raw.get("finish_ceiling", "N/A")
-        return f"{room_id} Architectural — Floor: {floor}, Wall: {wall}, Ceiling: {ceiling} ({status})"
+        parts = []
         
-    return f"{room_id} Template ({template_type}) - Status: {status} by {author}"
+        # Dimensions
+        dims = raw.get("dimensions", "")
+        ceiling = raw.get("ceiling_height", "")
+        if dims:
+            parts.append(f"Dims: {dims}")
+        if ceiling:
+            parts.append(f"Ceiling: {ceiling}")
+        
+        # Finishes
+        finishes = raw.get("finishes", {})
+        floor_mat = finishes.get("floor", {}).get("material", "")
+        if floor_mat:
+            parts.append(f"Floor: {floor_mat}")
+        
+        # Doors
+        doors = raw.get("doors", {})
+        door_count = doors.get("count", 0)
+        if door_count > 0:
+            parts.append(f"{door_count} doors")
+        
+        # Special rooms
+        special = raw.get("special_rooms", {})
+        if special.get("clean_room", {}).get("classification"):
+            parts.append("clean room")
+        if special.get("lab", {}).get("fume_hood"):
+            parts.append("lab")
+        if special.get("operating_room", {}).get("or_number"):
+            parts.append("OR")
+        
+        # ADA
+        if raw.get("accessibility", {}).get("ada_required"):
+            parts.append("ADA")
+        
+        summary = f"{room_id} Architectural — " + ", ".join(parts) if parts else f"{room_id} Architectural (empty)"
+        return f"{summary} ({status})"
+        
+    return f"{room_id} Template ({template_type}) - Status: {status}"
 
 def derive_template_tags(raw: Dict[str, Any]) -> List[str]:
-    """Derives automatic tags from the template payload."""
+    """Derives automatic tags from the comprehensive template payload."""
     tags = []
     
-    # Electrical heuristics
-    if raw.get("lighting_circuits"): tags.append("lighting")
-    if raw.get("critical_load"): tags.append("critical_load")
-    if raw.get("appliances"): tags.append("appliances")
-    if raw.get("panel") or raw.get("circuit"): tags.append("panel_info")
+    # Basic Electrical
+    circuits = raw.get("circuits", {})
+    if circuits.get("lighting"): tags.append("lighting")
+    if circuits.get("power"): tags.append("power")
+    if circuits.get("emergency"): tags.append("emergency")
+    if circuits.get("critical"): tags.append("critical")
+    if circuits.get("ups"): tags.append("ups")
     
-    # Architectural heuristics
-    if raw.get("finish_floor") or raw.get("finish_wall") or raw.get("finish_ceiling"): tags.append("finish")
-    if raw.get("fire_rating"): tags.append("fire_rated")
+    outlets = raw.get("outlets", {})
+    if outlets.get("regular_outlets", 0) > 0 or outlets.get("controlled_outlets", 0) > 0:
+        tags.append("outlets")
+    if outlets.get("gfci_outlets", 0) > 0: tags.append("gfci")
+    if outlets.get("hospital_grade", 0) > 0: tags.append("hospital_grade")
+    if outlets.get("red_outlets", 0) > 0: tags.append("emergency_power")
+    
+    if raw.get("mechanical_equipment"): tags.append("mechanical")
+    if raw.get("appliances"): tags.append("appliances")
+    
+    # Fire Alarm
+    fa = raw.get("fire_alarm", {})
+    if any([fa.get(k, {}).get("count", 0) > 0 for k in ["smoke_detectors", "heat_detectors", "pull_stations", "horn_strobes"]]):
+        tags.append("fire_alarm")
+    
+    # Data/Telecom
+    dt = raw.get("data_telecom", {})
+    if dt.get("data_outlets", 0) > 0: tags.append("data")
+    if dt.get("wireless_ap"): tags.append("wireless")
+    
+    # Security
+    sec = raw.get("security", {})
+    if sec.get("cameras", {}).get("count", 0) > 0: tags.append("security")
+    if sec.get("card_readers", {}).get("count", 0) > 0: tags.append("access_control")
+    
+    # AV
+    av = raw.get("audiovisual", {})
+    if av.get("displays", {}).get("count", 0) > 0 or av.get("projectors", {}).get("count", 0) > 0:
+        tags.append("audiovisual")
+    
+    # Healthcare
+    if raw.get("nurse_call", {}).get("stations", {}).get("count", 0) > 0:
+        tags.append("nurse_call")
+    if raw.get("medical_gas", {}).get("oxygen", {}).get("count", 0) > 0:
+        tags.append("medical_gas")
+    
+    # Lab/Special
+    lab = raw.get("lab_systems", {})
+    if lab.get("fume_hood") or lab.get("biosafety_cabinet"):
+        tags.append("lab")
+    
+    # Data Center
+    dc = raw.get("data_center", {})
+    if dc.get("rack_count", 0) > 0:
+        tags.append("data_center")
+    
+    # Kitchen
+    kitchen = raw.get("kitchen_systems", {})
+    if kitchen.get("hood_suppression"):
+        tags.append("food_service")
+    
+    # Architectural
+    if raw.get("walls"): tags.append("walls")
+    if raw.get("ceiling_height"): tags.append("ceiling")
+    if raw.get("dimensions"): tags.append("dimensions")
+    
+    finishes = raw.get("finishes", {})
+    if finishes: tags.append("finishes")
+    
+    doors = raw.get("doors", {})
+    if doors.get("count", 0) > 0: tags.append("doors")
+    if doors.get("fire_rated"): tags.append("fire_rated")
+    
+    # Code/Compliance
+    if raw.get("accessibility", {}).get("ada_required"):
+        tags.append("ada")
+    if raw.get("fire_life_safety", {}).get("fire_rating_required"):
+        tags.append("fire_rated")
+    
+    # Special Room Types
+    special = raw.get("special_rooms", {})
+    if special.get("clean_room", {}).get("classification"):
+        tags.append("clean_room")
+    if special.get("lab", {}).get("fume_hood"):
+        tags.append("lab")
+    if special.get("operating_room", {}).get("or_number"):
+        tags.append("operating_room")
+    if special.get("data_center", {}).get("raised_floor"):
+        tags.append("data_center")
     
     # Status
     if raw.get("template_status") == "signed_off": tags.append("signed_off")
     
-    return [t.lower() for t in tags]
+    # Field Issues
+    if raw.get("discrepancies"): tags.append("has_discrepancies")
+    
+    return list(set([t.lower() for t in tags]))  # Dedupe with set
 ```
 
 -----
@@ -1076,6 +1258,7 @@ if __name__ == "__main__":
 
     # Example 2: Search for a signed-off template (will skip facts)
     # NOTE: This assumes your test data includes a signed-off template
+    # Example content would be: "A4 Electrical — Lighting: L47, L48, Outlets: 8 (2 controlled), Fixtures: 4, Equipment: DW, Range (signed_off)"
     template_filter = "doc_type eq 'template' and template_status eq 'signed_off'"
     res2 = unified_search("Unit A4 Kitchen", search_filter=template_filter, top=50)
     show("Signed-off templates in Unit A4 (Templates-only)", res2)
@@ -1105,18 +1288,49 @@ except ImportError:
     sys.path.append(str(pathblib.Path(__file__).parent.parent.parent))
     from tools.schedule_postpass import transform
 
-# Dummy template content for testing
+# Dummy template content for testing (matches comprehensive e_rooms_template.json structure)
 SAMPLE_TEMPLATE_ELEC = {
     "sheet_number": "E2.03",
     "room_id": "A4",
     "room_name": "Unit A4 Kitchen",
-    "template_type": "electrical",
-    "lighting_circuits": "L47/L48",
-    "receptacle_count": 6,
-    "appliances": ["DW", "Range"],
+    "levels": ["Level 2"],
+    "occupancy_type": "kitchen",
     "template_status": "signed_off",
     "template_author": "jfernandez",
-    "last_modified": "2025-05-01T10:00:00Z"
+    "template_last_modified": "2025-05-01T10:00:00Z",
+    "circuits": {
+        "lighting": ["L47", "L48"],
+        "power": ["P12"],
+        "emergency": []
+    },
+    "light_fixtures": {
+        "fixture_ids": ["A", "B"],
+        "fixture_count": {"A": 2, "B": 2},
+        "fixture_notes": "Type A = LED troffer, B = pendant"
+    },
+    "outlets": {
+        "regular_outlets": 6,
+        "controlled_outlets": 2,
+        "gfci_outlets": 2,
+        "usb_outlets": 0
+    },
+    "switches": {
+        "count": 2,
+        "type": "dimmer",
+        "model": "Lutron",
+        "dimming": "0-10V"
+    },
+    "appliances": ["DW", "Range"],
+    "fire_alarm": {
+        "smoke_detectors": {"count": 1, "type": "photoelectric", "locations": ["ceiling"]},
+        "horn_strobes": {"count": 0}
+    },
+    "data_telecom": {
+        "data_outlets": 2,
+        "wireless_ap": False
+    },
+    "discrepancies": [],
+    "field_notes": ""
 }
 
 def test_transform_runs(tmp_path: pathlib.Path):
@@ -1188,8 +1402,15 @@ def test_transform_runs(tmp_path: pathlib.Path):
     assert template_doc["doc_type"] == "template"
     assert template_doc["room_id"] == "A4"
     assert "signed_off" in template_doc["template_tags"] # Check derived tag
+    assert "lighting" in template_doc["template_tags"] # Check lighting tag derived from circuits
+    assert "outlets" in template_doc["template_tags"] # Check outlets tag
+    assert "gfci" in template_doc["template_tags"] # Check GFCI tag from outlets
+    assert "appliances" in template_doc["template_tags"] # Check appliances tag
+    assert "fire_alarm" in template_doc["template_tags"] # Check fire alarm tag
+    assert "data" in template_doc["template_tags"] # Check data tag
     assert template_doc["template_status"] == "signed_off"
     assert template_doc["template_payload"].startswith('{"sheet_number":') # Check payload exists
+    assert "L47" in template_doc["content"] # Check summary contains lighting circuit
 
     # Check Coverage Report
     coverage_path = out_dir / "coverage_report.csv"
