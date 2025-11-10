@@ -4,6 +4,8 @@ import logging
 import asyncio
 import uuid
 import time
+import math
+from datetime import datetime
 from enum import Enum
 from typing import Dict, Any, Optional, TypedDict, cast, Iterable
 from tqdm.asyncio import tqdm
@@ -45,6 +47,9 @@ from config.settings import (
     STRUCTURED_BLOB_CONTAINER,
     FORCE_PANEL_OCR,
 )
+
+OCR_TOKEN_THRESHOLD = int(os.getenv("OCR_TOKEN_THRESHOLD", "5000"))
+AVERAGE_CHARS_PER_TOKEN = float(os.getenv("OCR_AVG_CHARS_PER_TOKEN", "4"))
 
 
 # Constants for status messages
@@ -141,6 +146,7 @@ class FileProcessingPipeline:
     5. Normalizes the data based on drawing type
     6. Saves the results to storage
     7. Optionally generates additional templates
+    8. Writes a metadata manifest summarizing the run
     
     Each step is implemented as a separate method for clarity and maintainability.
     """
@@ -185,28 +191,35 @@ class FileProcessingPipeline:
         self.pipeline_id: str = str(uuid.uuid4())
         
         # Set up output paths
+        self.output_base_folder: str = output_folder
         self.output_drawing_type_folder: str = drawing_type if drawing_type else "General"
-        self.type_folder: str = os.path.join(output_folder, self.output_drawing_type_folder)
+        self.type_folder: str = os.path.join(self.output_base_folder, self.output_drawing_type_folder)
         os.makedirs(self.type_folder, exist_ok=True)
         self.storage_discipline: str = slugify_storage_component(self.output_drawing_type_folder)
         self.drawing_slug, self.version_folder = derive_drawing_identifiers(self.file_name)
-        
+        self.drawing_folder: str = os.path.join(self.type_folder, self.drawing_slug)
+        self.structured_folder: str = os.path.join(self.drawing_folder, "structured")
+        self.templates_folder: str = os.path.join(self.drawing_folder, "templates")
+        self.meta_file_path: str = os.path.join(self.drawing_folder, "meta.json")
+        for folder in (self.drawing_folder, self.structured_folder, self.templates_folder):
+            os.makedirs(folder, exist_ok=True)
+
         output_filename_base: str = os.path.splitext(self.file_name)[0]
         self.structured_output_path: str = os.path.join(
-            self.type_folder, f"{output_filename_base}_structured.json"
+            self.structured_folder, f"{output_filename_base}_structured.json"
         )
         self.error_output_path: str = os.path.join(
-            self.type_folder, f"{output_filename_base}_error.json"
+            self.drawing_folder, f"{output_filename_base}_error.json"
         )
         self.raw_error_output_path: str = os.path.join(
-            self.type_folder, f"{output_filename_base}_raw_response_error.txt"
+            self.drawing_folder, f"{output_filename_base}_raw_response_error.txt"
         )
 
         # Initialize processing state
         self.processing_state: ProcessingState = {
             "pdf_path": pdf_path,
             "original_drawing_type": drawing_type,
-            "templates_created": templates_created,
+            "templates_created": dict(templates_created),
             "extraction_result": None,
             "processing_type_for_ai": drawing_type,  # initial value
             "subtype": None,
@@ -215,6 +228,7 @@ class FileProcessingPipeline:
             "final_status_dict": None,
             "source_document_info": None,
             "structured_document_info": None,
+            "template_files": [],
         }
 
     async def _save_pipeline_status(
@@ -277,7 +291,8 @@ class FileProcessingPipeline:
         current_chars = len(extraction_result.raw_text.strip())
         
         # Expected character ranges by drawing type (for logging context only)
-        drawing_type = self.processing_state["processing_type_for_ai"].lower()
+        processing_drawing_type = self.processing_state["processing_type_for_ai"] or "General"
+        drawing_type = processing_drawing_type.lower()
         expected_per_page_ranges = {
             "mechanical": "2000-3000 per page for schedules, 800-1500 for details",
             "electrical": "1500-2500 per page for panel schedules, 500-1000 for details", 
@@ -331,38 +346,51 @@ class FileProcessingPipeline:
             decision_reason = "FORCE_PANEL_OCR override for panel schedule"
         
         # Create enhanced OCR decision metrics
+        estimated_tokens = math.ceil(current_chars / AVERAGE_CHARS_PER_TOKEN) if current_chars > 0 else 0
+
         ocr_decision_metrics = {
             "performed": False,
             "reason": decision_reason,
             "chars_extracted": current_chars,
+            "char_count_total": current_chars,
             "chars_per_page": round(chars_per_page, 1),
             "page_count": page_count,
             "threshold_per_page": OCR_THRESHOLD,  # Now correctly documented as per-page
-            "drawing_type": drawing_type,
+            "char_count_threshold": OCR_THRESHOLD,
+            "drawing_type": processing_drawing_type,
             "expected_chars_per_page": expected_chars_per_page,
             "ocr_enabled": OCR_ENABLED,
             "should_ocr": should_ocr,
             "force_panel_ocr": FORCE_PANEL_OCR and is_panel_schedule_doc,
+            "estimated_tokens": estimated_tokens,
+            "token_threshold": OCR_TOKEN_THRESHOLD,
+            "tiles_processed": 0,
         }
         
         self.logger.info(f"🔍 OCR Analysis: {current_chars} chars total ({chars_per_page:.0f}/page), threshold={OCR_THRESHOLD}/page, decision='{decision_reason}'")
 
         if OCR_ENABLED:
             try:
-                from services.ocr_service import run_ocr_if_needed
+                from services.ocr_service import run_ocr_if_needed, OCRRunResult
                 
                 # Time the OCR operation for metrics
                 ocr_start_time = time.time()
                 
-                ocr_text = await run_ocr_if_needed(
+                ocr_payload = await run_ocr_if_needed(
                     client=self.client,
                     pdf_path=self.pdf_path,
                     current_text=extraction_result.raw_text,
                     threshold=OCR_THRESHOLD,
                     max_pages=OCR_MAX_PAGES,
                     page_count=page_count,
-                    assume_ocr_needed=should_ocr
+                    assume_ocr_needed=should_ocr,
+                    drawing_type=processing_drawing_type,
                 )
+                if isinstance(ocr_payload, OCRRunResult):
+                    ocr_text = ocr_payload.text
+                    ocr_decision_metrics["tiles_processed"] = ocr_payload.tiles_processed
+                else:
+                    ocr_text = ocr_payload or ""
                 
                 ocr_duration = time.time() - ocr_start_time
                 
@@ -393,9 +421,11 @@ class FileProcessingPipeline:
                     from utils.performance_utils import get_tracker
                     tracker = get_tracker()
                     tracker.add_metric_with_context(
-                        "ocr_decision", self.file_name,
-                        self.processing_state["processing_type_for_ai"], 
-                        ocr_duration, ocr_decision_metrics
+                        category="ocr_decision",
+                        duration=ocr_duration,
+                        file_path=self.pdf_path,
+                        drawing_type=processing_drawing_type,
+                        **ocr_decision_metrics,
                     )
                 except:
                     pass
@@ -419,9 +449,11 @@ class FileProcessingPipeline:
                         self.processing_state["processing_type_for_ai"], ocr_duration
                     )
                     tracker.add_metric_with_context(
-                        "ocr_decision", self.file_name + "_FAILED",
-                        self.processing_state["processing_type_for_ai"], 
-                        ocr_duration, ocr_decision_metrics
+                        category="ocr_decision",
+                        duration=ocr_duration,
+                        file_path=self.pdf_path,
+                        drawing_type=processing_drawing_type,
+                        **ocr_decision_metrics,
                     )
                 except:
                     pass
@@ -431,9 +463,11 @@ class FileProcessingPipeline:
                 from utils.performance_utils import get_tracker
                 tracker = get_tracker()
                 tracker.add_metric_with_context(
-                    "ocr_decision", self.file_name,
-                    self.processing_state["processing_type_for_ai"], 
-                    0, ocr_decision_metrics
+                    category="ocr_decision",
+                    duration=0,
+                    file_path=self.pdf_path,
+                    drawing_type=processing_drawing_type,
+                    **ocr_decision_metrics,
                 )
             except:
                 pass
@@ -703,7 +737,6 @@ class FileProcessingPipeline:
         components = [
             self.storage_discipline,
             self.drawing_slug,
-            self.version_folder,
             self.file_name,
         ]
         return "/".join(filter(None, components))
@@ -714,7 +747,6 @@ class FileProcessingPipeline:
         components = [
             self.storage_discipline,
             self.drawing_slug,
-            self.version_folder,
             "structured",
             output_name,
         ]
@@ -725,11 +757,27 @@ class FileProcessingPipeline:
         components = [
             self.storage_discipline,
             self.drawing_slug,
-            self.version_folder,
             artifact_type,
             filename,
         ]
         return "/".join(filter(None, components))
+
+    def _relative_to_output_root(self, path: Optional[str]) -> Optional[str]:
+        """Return a path relative to the configured output root for readability."""
+        if not path:
+            return None
+        try:
+            return os.path.relpath(path, self.output_base_folder)
+        except Exception:
+            return path
+
+    def _iso_timestamp(self, ts: Optional[float] = None) -> str:
+        """Format a UNIX timestamp (or now) into an ISO-8601 UTC string."""
+        if ts is None:
+            dt = datetime.utcnow()
+        else:
+            dt = datetime.utcfromtimestamp(ts)
+        return dt.replace(microsecond=0).isoformat() + "Z"
 
     def _attach_source_reference(self, stored_info: StoredFileInfo) -> None:
         """Attach source document metadata to the parsed JSON payload."""
@@ -962,10 +1010,13 @@ class FileProcessingPipeline:
                 result = process_architectural_drawing(
                     self.processing_state["parsed_json_data"], 
                     self.pdf_path, 
-                    self.type_folder
+                    self.templates_folder
                 )
                 
                 self.processing_state["templates_created"]["floor_plan"] = True
+                self.templates_created["floor_plan"] = True
+                self.processing_state.setdefault("template_files", [])
+                self.processing_state["template_files"] = result.get("generated_files", [])
                 self.logger.info(f"Created room templates: {result}")
 
                 artifact_paths = [
@@ -980,6 +1031,79 @@ class FileProcessingPipeline:
             except Exception as e:
                 self.logger.error(f"Error creating room templates for {self.file_name}: {str(e)}")
                 # Continue processing despite template generation failure
+
+    async def _save_metadata_file(self) -> None:
+        """Persist a lightweight metadata manifest for the processed drawing."""
+        final_status = self.processing_state.get("final_status_dict")
+        if not final_status or not final_status.get("success"):
+            return
+
+        structured_section: Dict[str, Any] = {
+            "directory": {
+                "path": self.structured_folder,
+                "relative_path": self._relative_to_output_root(self.structured_folder),
+            }
+        }
+
+        if os.path.exists(self.structured_output_path):
+            structured_section["file"] = {
+                "path": self.structured_output_path,
+                "relative_path": self._relative_to_output_root(self.structured_output_path),
+                "size_bytes": os.path.getsize(self.structured_output_path),
+                "updated_at": self._iso_timestamp(os.path.getmtime(self.structured_output_path)),
+            }
+
+        structured_archive = self.processing_state.get("structured_document_info")
+        if structured_archive:
+            structured_section["archive"] = dict(structured_archive)
+
+        template_entries = []
+        for template_path in self.processing_state.get("template_files", []) or []:
+            if not template_path or not os.path.exists(template_path):
+                continue
+            template_entries.append(
+                {
+                    "path": template_path,
+                    "relative_path": self._relative_to_output_root(template_path),
+                    "size_bytes": os.path.getsize(template_path),
+                    "updated_at": self._iso_timestamp(os.path.getmtime(template_path)),
+                }
+            )
+
+        metadata_payload = {
+            "drawing": {
+                "slug": self.drawing_slug,
+                "discipline": self.output_drawing_type_folder,
+                "source_pdf": {
+                    "filename": self.file_name,
+                    "path": self.pdf_path,
+                },
+                "processed_at": self._iso_timestamp(),
+                "pipeline_id": self.pipeline_id,
+                "revision_hint": self.version_folder,
+            },
+            "structured_output": structured_section,
+            "templates": {
+                "directory": {
+                    "path": self.templates_folder,
+                    "relative_path": self._relative_to_output_root(self.templates_folder),
+                },
+                "flags": dict(self.processing_state.get("templates_created", {})),
+                "files": template_entries,
+            },
+            "status": final_status.get("status"),
+            "success": final_status.get("success", False),
+        }
+
+        source_info = self.processing_state.get("source_document_info")
+        if source_info:
+            metadata_payload["source_document"] = dict(source_info)
+
+        saved = await self.storage.save_json(metadata_payload, self.meta_file_path)
+        if saved:
+            self.logger.info(f"Saved drawing metadata to {self.meta_file_path}")
+        else:
+            self.logger.error(f"Failed to save drawing metadata file for {self.file_name}")
 
     @time_operation("total_processing")
     async def process(self) -> ProcessingResult:
@@ -1028,6 +1152,9 @@ class FileProcessingPipeline:
                 # Step 7: Generate room templates (optional)
                 await self._step_generate_room_templates()
                 pbar.update(10)  # Room templates
+
+                # Step 8: Persist metadata manifest for this drawing
+                await self._save_metadata_file()
 
                 # Return final result
                 self.logger.info(f"PIPELINE_END file={self.file_name} pipeline_id={self.pipeline_id}")
@@ -1148,8 +1275,10 @@ async def process_pdf_async(
         filename_base = os.path.splitext(os.path.basename(pdf_path))[0]
         output_type_folder = drawing_type if drawing_type else "General"
         type_folder = os.path.join(output_folder, output_type_folder)
-        os.makedirs(type_folder, exist_ok=True)
-        error_output_path = os.path.join(type_folder, f"{filename_base}_error.json")
+        drawing_slug, _ = derive_drawing_identifiers(os.path.basename(pdf_path))
+        drawing_folder = os.path.join(type_folder, drawing_slug)
+        os.makedirs(drawing_folder, exist_ok=True)
+        error_output_path = os.path.join(drawing_folder, f"{filename_base}_error.json")
         
         # Save error status
         await _save_status_file(

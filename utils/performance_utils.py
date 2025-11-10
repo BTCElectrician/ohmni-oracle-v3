@@ -13,11 +13,67 @@ from typing import (
     List,
     Optional,
     TypeVar,
+    Tuple,
 )
 from functools import wraps
 from contextlib import contextmanager
 
 T = TypeVar("T")
+
+
+def _default_pricing_table() -> Dict[str, Dict[str, float]]:
+    """Base Tier 4 pricing (USD per 1M tokens) with GPT-4.1 defaults."""
+    base = {
+        "gpt-4.1": {"input": 3.00, "output": 12.00},
+        "gpt-4.1-mini": {"input": 0.80, "output": 3.20},
+        "gpt-4.1-nano": {"input": 0.20, "output": 0.80},
+        "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+        "gpt-4o-mini-ocr": {"input": 0.15, "output": 0.60},
+    }
+    # Mirror pricing for GPT-5 family until official Tier-4 rates are published
+    base["gpt-5"] = dict(base["gpt-4.1"])
+    base["gpt-5-mini"] = dict(base["gpt-4.1-mini"])
+    base["gpt-5-nano"] = dict(base["gpt-4.1-nano"])
+    base["gpt-5o"] = dict(base["gpt-4.1"])
+    base["gpt-5o-mini"] = dict(base["gpt-4o-mini"])
+    return base
+
+
+def _load_pricing_table() -> Dict[str, Dict[str, float]]:
+    """Load Tier-4 pricing table with optional JSON overrides."""
+    table = _default_pricing_table()
+    override_raw = os.getenv("METRIC_PRICING_OVERRIDES")
+    if not override_raw:
+        return table
+
+    try:
+        overrides = json.loads(override_raw)
+        if isinstance(overrides, dict):
+            for model, values in overrides.items():
+                if not isinstance(values, dict):
+                    continue
+                input_price = float(values.get("input", 0.0))
+                output_price = float(values.get("output", 0.0))
+                table[model] = {"input": input_price, "output": output_price}
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "METRIC_PRICING_OVERRIDES invalid JSON - using defaults (%s)", exc
+        )
+    return table
+
+
+PRICING_TIER_4 = _load_pricing_table()
+TIER4_MONTHLY_LIMIT = float(os.getenv("TIER4_MONTHLY_LIMIT", "5000"))
+WORKDAY_HOURS = float(os.getenv("METRICS_WORKDAY_HOURS", "8"))
+WORKDAYS_PER_MONTH = float(os.getenv("METRICS_WORKDAYS_PER_MONTH", "20"))
+STORAGE_PER_1000_FILES_GB = float(os.getenv("METRICS_STORAGE_PER_1000_FILES_GB", "12.5"))
+AZURE_STORAGE_COST_PER_GB = float(os.getenv("METRICS_STORAGE_COST_PER_GB", "0.20"))
+METRICS_AVG_CHARS_PER_TOKEN = float(os.getenv("METRICS_AVG_CHARS_PER_TOKEN", "4"))
+BASELINE_AVG_TIME = float(os.getenv("METRICS_BASELINE_AVG_TIME", "86.62"))
+BASELINE_DATE = os.getenv("METRICS_BASELINE_DATE", "2025-11-09")
+BASELINE_ACCEPTABLE_MIN = float(os.getenv("METRICS_BASELINE_MIN", "85"))
+BASELINE_ACCEPTABLE_MAX = float(os.getenv("METRICS_BASELINE_MAX", "105"))
+BASELINE_COST_PER_DRAWING = float(os.getenv("METRICS_BASELINE_COST_PER_DRAWING", "0.04"))
 
 
 class PerformanceTracker:
@@ -191,6 +247,345 @@ class PerformanceTracker:
             self.metrics[category], key=lambda m: m["duration"], reverse=True
         )[:limit]
 
+    @staticmethod
+    def _is_ocr_metric_entry(metric: Dict[str, Any]) -> bool:
+        """Detect if an API metric came from the OCR subsystem."""
+        if not metric:
+            return False
+
+        if metric.get("is_ocr"):
+            return True
+
+        api_type = (metric.get("api_type") or "").lower()
+        if api_type.startswith("ocr"):
+            return True
+
+        model_name = (metric.get("model") or "").lower()
+        return model_name.endswith("-ocr") or "ocr" in model_name
+
+    def _calculate_cost_analysis(self) -> Tuple[Dict[str, Any], Dict[str, Dict[str, Any]]]:
+        """Aggregate per-model and per-file cost data."""
+
+        def new_cost_entry():
+            return {
+                "total_input_tokens": 0,
+                "total_output_tokens": 0,
+                "input_cost": 0.0,
+                "output_cost": 0.0,
+                "total_cost": 0.0,
+            }
+
+        by_model: Dict[str, Dict[str, Any]] = {
+            model: new_cost_entry() for model in PRICING_TIER_4
+        }
+        file_costs: Dict[str, Dict[str, Any]] = {}
+        api_metrics = self.metrics.get("api_request", [])
+
+        main_total = 0.0
+        ocr_total = 0.0
+
+        for metric in api_metrics:
+            model = metric.get("model") or "unknown"
+            prompt_tokens = int(metric.get("prompt_tokens") or 0)
+            completion_tokens = int(metric.get("completion_tokens") or 0)
+            pricing = PRICING_TIER_4.get(model, {"input": 0.0, "output": 0.0})
+            input_cost = (prompt_tokens / 1_000_000) * pricing.get("input", 0.0)
+            output_cost = (completion_tokens / 1_000_000) * pricing.get("output", 0.0)
+            total_cost = input_cost + output_cost
+
+            entry = by_model.setdefault(model, new_cost_entry())
+            entry["total_input_tokens"] += prompt_tokens
+            entry["total_output_tokens"] += completion_tokens
+            entry["input_cost"] += input_cost
+            entry["output_cost"] += output_cost
+            entry["total_cost"] += total_cost
+
+            file_name = metric.get("file_name") or metric.get("file_path") or "unknown"
+            file_entry = file_costs.setdefault(
+                file_name,
+                {
+                    "drawing_type": metric.get("drawing_type", "unknown"),
+                    "total_cost": 0.0,
+                    "main_cost": 0.0,
+                    "ocr_cost": 0.0,
+                    "tiles_processed": 0,
+                },
+            )
+            if (
+                file_entry.get("drawing_type") in (None, "unknown")
+                and metric.get("drawing_type")
+            ):
+                file_entry["drawing_type"] = metric.get("drawing_type")
+
+            file_entry["total_cost"] += total_cost
+
+            if self._is_ocr_metric_entry(metric):
+                file_entry["ocr_cost"] += total_cost
+                file_entry["tiles_processed"] += 1
+                ocr_total += total_cost
+            else:
+                file_entry["main_cost"] += total_cost
+                main_total += total_cost
+
+        grand_total = main_total + ocr_total
+        files_processed = len(self.metrics.get("total_processing", []))
+        cost_per_drawing = (grand_total / files_processed) if files_processed else 0.0
+        cost_per_1000 = cost_per_drawing * 1000
+        percent_limit = (
+            (grand_total / TIER4_MONTHLY_LIMIT) * 100 if TIER4_MONTHLY_LIMIT else 0.0
+        )
+
+        cost_summary = {
+            "main_processing_total": main_total,
+            "ocr_total": ocr_total,
+            "grand_total": grand_total,
+            "cost_per_drawing": cost_per_drawing,
+            "cost_per_1000_drawings": cost_per_1000,
+            "percent_of_5000_tier4_limit": percent_limit,
+        }
+
+        cost_analysis = {
+            "tier_4_pricing": PRICING_TIER_4,
+            "by_model": by_model,
+            "cost_summary": cost_summary,
+        }
+
+        return cost_analysis, file_costs
+
+    def _build_ocr_decision_log(
+        self, file_costs: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Summarize OCR trigger decisions per file."""
+        ocr_metrics = self.metrics.get("ocr_decision", [])
+        by_file: List[Dict[str, Any]] = []
+        triggered = 0
+
+        for metric in ocr_metrics:
+            file_name = metric.get("file_name") or "unknown"
+            ocr_triggered = bool(metric.get("performed"))
+            if ocr_triggered:
+                triggered += 1
+
+            file_cost_entry = file_costs.get(file_name, {})
+            estimated_tokens = metric.get("estimated_tokens")
+            if estimated_tokens is None:
+                chars = metric.get("char_count_total") or metric.get("chars_extracted") or 0
+                estimated_tokens = (
+                    int(chars / METRICS_AVG_CHARS_PER_TOKEN) if chars else 0
+                )
+
+            log_entry = {
+                "file_name": file_name,
+                "drawing_type": metric.get("drawing_type", "unknown"),
+                "ocr_triggered": ocr_triggered,
+                "trigger_reason": metric.get("reason"),
+                "char_count_total": metric.get("char_count_total", metric.get("chars_extracted")),
+                "char_count_threshold": metric.get("char_count_threshold", metric.get("threshold_per_page")),
+                "estimated_tokens": estimated_tokens,
+                "token_threshold": metric.get("token_threshold", 0),
+                "ocr_duration_sec": metric.get("ocr_duration_seconds"),
+                "ocr_cost": file_cost_entry.get("ocr_cost", 0.0),
+                "tiles_processed": metric.get("tiles_processed", file_cost_entry.get("tiles_processed", 0)),
+                "page_count": metric.get("page_count"),
+                "chars_per_page": metric.get("chars_per_page"),
+            }
+            by_file.append(log_entry)
+
+        total = len(by_file)
+        skipped = max(total - triggered, 0)
+        summary = {
+            "total_files": total,
+            "triggered_ocr": triggered,
+            "skipped_ocr": skipped,
+            "ocr_trigger_rate_percent": (triggered / total * 100) if total else 0.0,
+        }
+
+        return {"summary": summary, "by_file": by_file}
+
+    def _build_drawing_type_costs(
+        self,
+        file_costs: Dict[str, Dict[str, Any]],
+        ocr_log: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Aggregate cost + OCR trigger rate per drawing type."""
+        entries = list((ocr_log or {}).get("by_file", []))
+        if not entries and file_costs:
+            for file_name, data in file_costs.items():
+                entries.append(
+                    {
+                        "file_name": file_name,
+                        "drawing_type": data.get("drawing_type", "unknown"),
+                        "ocr_triggered": False,
+                    }
+                )
+
+        type_stats: Dict[str, Dict[str, Any]] = {}
+        for entry in entries:
+            drawing_type = entry.get("drawing_type") or "Unknown"
+            stats = type_stats.setdefault(
+                drawing_type,
+                {
+                    "count": 0,
+                    "total_cost": 0.0,
+                    "ocr_triggers": 0,
+                    "most_expensive_file": None,
+                    "max_cost": 0.0,
+                },
+            )
+            file_cost = file_costs.get(entry.get("file_name", ""), {}).get("total_cost", 0.0)
+            stats["count"] += 1
+            stats["total_cost"] += file_cost
+            if entry.get("ocr_triggered"):
+                stats["ocr_triggers"] += 1
+            if file_cost > stats["max_cost"]:
+                stats["max_cost"] = file_cost
+                stats["most_expensive_file"] = entry.get("file_name")
+
+        by_type: Dict[str, Dict[str, Any]] = {}
+        for drawing_type, stats in type_stats.items():
+            count = stats["count"] or 1
+            avg_cost = stats["total_cost"] / count
+            trigger_rate = stats["ocr_triggers"] / count
+            by_type[drawing_type] = {
+                "count": stats["count"],
+                "total_cost": stats["total_cost"],
+                "avg_cost_per_drawing": avg_cost,
+                "ocr_trigger_rate": trigger_rate,
+            }
+            if stats["most_expensive_file"]:
+                by_type[drawing_type]["most_expensive_file"] = stats["most_expensive_file"]
+
+        insight = "No drawing cost data collected yet."
+        if by_type:
+            top_type, top_stats = max(
+                by_type.items(), key=lambda item: item[1].get("avg_cost_per_drawing", 0.0)
+            )
+            insight = (
+                f"{top_type} drawings have the highest avg cost (${top_stats['avg_cost_per_drawing']:.2f}) "
+                f"with an OCR trigger rate of {top_stats['ocr_trigger_rate'] * 100:.0f}%."
+            )
+
+        return {"by_type": by_type, "insight": insight}
+
+    def _build_scaling_projections(self, cost_analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """Project throughput and spend at larger scales."""
+        total_processing = self.metrics.get("total_processing", [])
+        files_processed = len(total_processing)
+        total_time = sum(m.get("duration", 0.0) for m in total_processing)
+        avg_time = (total_time / files_processed) if files_processed else 0.0
+
+        cost_summary = cost_analysis.get("cost_summary", {})
+        total_cost = cost_summary.get("grand_total", 0.0)
+        cost_per_file = cost_summary.get("cost_per_drawing", 0.0)
+
+        files_per_hour = (3600 / avg_time) if avg_time > 0 else 0.0
+        files_per_day = files_per_hour * WORKDAY_HOURS
+        files_per_month = files_per_day * WORKDAYS_PER_MONTH
+
+        cost_per_hour = cost_per_file * files_per_hour
+        cost_per_day = cost_per_hour * WORKDAY_HOURS
+        cost_per_month = cost_per_day * WORKDAYS_PER_MONTH
+        months_until_limit = (
+            (TIER4_MONTHLY_LIMIT / cost_per_month) if cost_per_month > 0 else 0.0
+        )
+
+        current_run = {
+            "files_processed": files_processed,
+            "total_time_seconds": total_time,
+            "avg_time_per_file": avg_time,
+            "total_cost": total_cost,
+            "cost_per_file": cost_per_file,
+        }
+
+        extrapolated = {
+            "files_per_hour": files_per_hour,
+            "files_per_8hr_workday": files_per_day,
+            "files_per_20_workday_month": files_per_month,
+            "cost_per_hour": cost_per_hour,
+            "cost_per_day": cost_per_day,
+            "cost_per_month": cost_per_month,
+            "months_until_tier4_limit_reached": months_until_limit,
+            "storage_per_1000_files_gb": STORAGE_PER_1000_FILES_GB,
+            "estimated_azure_storage_cost_per_month": STORAGE_PER_1000_FILES_GB * AZURE_STORAGE_COST_PER_GB,
+        }
+
+        return {"current_run": current_run, "extrapolated": extrapolated}
+
+    def _build_baseline_comparison(
+        self,
+        scaling: Dict[str, Any],
+        ocr_log: Dict[str, Any],
+        drawing_type_costs: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Compare current performance vs. baseline targets."""
+        current_run = scaling.get("current_run", {})
+        files_processed = current_run.get("files_processed", 0)
+        current_avg = current_run.get("avg_time_per_file", 0.0)
+        delta_time = current_avg - BASELINE_AVG_TIME if files_processed else 0.0
+        percent_diff = (
+            (delta_time / BASELINE_AVG_TIME) * 100 if BASELINE_AVG_TIME else 0.0
+        )
+
+        in_range = (
+            BASELINE_ACCEPTABLE_MIN <= current_avg <= BASELINE_ACCEPTABLE_MAX
+            if files_processed
+            else True
+        )
+        delta_section = {
+            "time_difference": delta_time,
+            "percent_slower": percent_diff,
+            "status": "✅ Within acceptable range" if in_range else "❌ Outside acceptable range",
+            "acceptable_range": f"{BASELINE_ACCEPTABLE_MIN:.0f}-{BASELINE_ACCEPTABLE_MAX:.0f} sec/drawing",
+            "in_range": in_range,
+        }
+
+        ocr_rate = (ocr_log.get("summary", {}).get("ocr_trigger_rate_percent", 0.0) if ocr_log else 0.0)
+        by_type = (drawing_type_costs or {}).get("by_type", {})
+        top_type = None
+        if by_type:
+            top_type = max(
+                by_type.items(),
+                key=lambda item: item[1].get("avg_cost_per_drawing", 0.0),
+            )[0]
+
+        if not files_processed:
+            recommendation = "Run at least one drawing to capture a current baseline."
+        elif not in_range and ocr_rate > 30:
+            focus = top_type or "the heaviest discipline"
+            recommendation = (
+                f"OCR overhead ({ocr_rate:.1f}% trigger rate) is pushing run time up. "
+                f"Inspect {focus} drawings for unnecessary OCR triggers."
+            )
+        elif not in_range:
+            recommendation = "Average time exceeds the baseline range. Review the slowest files for bottlenecks."
+        elif percent_diff < -10:
+            recommendation = "Processing is faster than baseline—consider refreshing the baseline if this trend holds."
+        else:
+            recommendation = "Performance is stable. Continue collecting data to build a trend line."
+
+        current_status = "collecting_trend_data" if files_processed < 10 else "tracking_velocity"
+        cost_per_file = current_run.get("cost_per_file") or BASELINE_COST_PER_DRAWING
+        cost_notes = (
+            "First time tracking costs" if current_run.get("cost_per_file") else "Using baseline estimate"
+        )
+
+        return {
+            "baseline": {
+                "avg_time_per_drawing": BASELINE_AVG_TIME,
+                "baseline_date": BASELINE_DATE,
+                "status": "established",
+            },
+            "current": {
+                "avg_time_per_drawing": current_avg,
+                "status": current_status,
+            },
+            "delta": delta_section,
+            "cost_baseline": {
+                "cost_per_drawing": cost_per_file,
+                "notes": cost_notes,
+            },
+            "recommendation": recommendation,
+        }
     def report(self):
         """
         Generate a report of performance metrics.
@@ -311,6 +706,21 @@ class PerformanceTracker:
         except Exception as e:
             self.logger.debug(f"Token stats aggregation error: {str(e)}")
 
+        cost_analysis, file_costs = self._calculate_cost_analysis()
+        report["cost_analysis"] = cost_analysis
+
+        ocr_log = self._build_ocr_decision_log(file_costs)
+        report["ocr_decision_log"] = ocr_log
+
+        scaling = self._build_scaling_projections(cost_analysis)
+        report["scaling_projections"] = scaling
+
+        drawing_costs = self._build_drawing_type_costs(file_costs, ocr_log)
+        report["drawing_type_costs"] = drawing_costs
+
+        baseline = self._build_baseline_comparison(scaling, ocr_log, drawing_costs)
+        report["baseline_comparison"] = baseline
+
         return report
 
     def log_report(self):
@@ -321,9 +731,22 @@ class PerformanceTracker:
 
         self.logger.info("=== Performance Report ===")
 
+        skip_categories = {
+            "api_statistics",
+            "api_percentage",
+            "api_token_statistics",
+            "timestamp",
+            "formatted_time",
+            "cost_analysis",
+            "ocr_decision_log",
+            "scaling_projections",
+            "baseline_comparison",
+            "drawing_type_costs",
+        }
+
         for category, data in report.items():
             # Skip special report sections (not operation categories)
-            if category in ["api_statistics", "api_percentage", "api_token_statistics", "timestamp", "formatted_time"]:
+            if category in skip_categories:
                 continue
 
             self.logger.info(f"Category: {category}")
@@ -486,6 +909,11 @@ class PerformanceTracker:
                 "api_percentage",
                 "timestamp",
                 "formatted_time",
+                "cost_analysis",
+                "ocr_decision_log",
+                "scaling_projections",
+                "baseline_comparison",
+                "drawing_type_costs",
             ]:
                 continue
 

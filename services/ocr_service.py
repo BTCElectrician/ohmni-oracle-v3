@@ -6,9 +6,12 @@ Features: 10% tile overlap ensures no text loss at boundaries, systematic covera
 import base64
 import logging
 import os
-from typing import Any
+import time
+from dataclasses import dataclass
+from typing import Any, Optional
 import pymupdf as fitz  # Match repo's import style
 from openai import AsyncOpenAI
+from utils.performance_utils import get_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +21,14 @@ DPI = int(os.getenv("OCR_DPI", "300"))  # 300 DPI is sufficient for text
 MODEL = os.getenv("OCR_MODEL", "gpt-4o-mini")  # Fast, cheap, accurate enough
 TOKENS_PER_TILE = int(os.getenv("OCR_TOKENS_PER_TILE", "3000"))  # Enough for full page
 OVERLAP_PERCENT = 0.1  # 10% overlap between tiles - proven to prevent text loss at boundaries
+
+
+@dataclass
+class OCRRunResult:
+    """Aggregated OCR result with tile metadata."""
+
+    text: str
+    tiles_processed: int = 0
 
 
 def _collect_text_from_content(content: Any) -> str:
@@ -96,8 +107,9 @@ def should_perform_ocr(extracted_text: str, pdf_path: str, page_count: int, ocr_
 async def ocr_page_with_tiling(
     client: AsyncOpenAI,
     pdf_path: str,
-    page_num: int
-) -> str:
+    page_num: int,
+    drawing_type: Optional[str] = None,
+) -> OCRRunResult:
     """
     Memory-safe tiling OCR with 10% overlap between tiles.
     
@@ -134,12 +146,14 @@ async def ocr_page_with_tiling(
         
         # DPI matrix
         matrix = fitz.Matrix(DPI / 72, DPI / 72)
-        
+        tracker = get_tracker()
         ocr_texts = []
+        tiles_processed = 0
         
         for row in range(GRID):
             for col in range(GRID):
                 try:
+                    tiles_processed += 1
                     # Calculate base tile position
                     base_x0 = page_rect.x0 + col * tile_width
                     base_y0 = page_rect.y0 + row * tile_height
@@ -169,6 +183,7 @@ async def ocr_page_with_tiling(
                     img_b64 = base64.b64encode(tile_pix.tobytes("png")).decode()
                     
                     # OCR via Chat Completions vision endpoint
+                    tile_start = time.time()
                     response = await client.chat.completions.create(
                         model=MODEL,
                         messages=[
@@ -188,6 +203,35 @@ async def ocr_page_with_tiling(
                         ],
                         max_tokens=TOKENS_PER_TILE,
                     )
+                    request_duration = time.time() - tile_start
+                    usage = getattr(response, "usage", None)
+                    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+                    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+                    total_tokens = getattr(usage, "total_tokens", 0) or 0
+                    
+                    try:
+                        tracker.add_metric_with_context(
+                            category="api_request",
+                            duration=request_duration,
+                            file_path=pdf_path,
+                            drawing_type=drawing_type or "OCR",
+                            model=MODEL,
+                            api_type="ocr_tile",
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=total_tokens,
+                            tokens_per_second=(
+                                completion_tokens / request_duration
+                                if request_duration > 0 and completion_tokens
+                                else None
+                            ),
+                            ocr_page=page_num + 1,
+                            ocr_tile=f"{row}-{col}",
+                            ocr_grid=GRID,
+                            is_ocr=True,
+                        )
+                    except Exception as metric_err:
+                        logger.debug(f"OCR metric logging failed: {metric_err}")
 
                     choice = (getattr(response, "choices", None) or [None])[0]
                     text = ""
@@ -200,8 +244,8 @@ async def ocr_page_with_tiling(
                     logger.warning(f"Tile {row},{col} failed: {e}")
         
         if ocr_texts:
-            return "\n\n".join(ocr_texts)
-        return ""
+            return OCRRunResult("\n\n".join(ocr_texts), tiles_processed)
+        return OCRRunResult("", tiles_processed)
 
 
 async def run_ocr_if_needed(
@@ -212,7 +256,8 @@ async def run_ocr_if_needed(
     max_pages: int = 2,
     page_count: int | None = None,
     assume_ocr_needed: bool | None = None,
-) -> str:
+    drawing_type: Optional[str] = None,
+) -> OCRRunResult:
     """
     Intelligent OCR decision based on text density and file characteristics.
     Uses per-page character density and file size heuristics to catch scanned drawings.
@@ -225,7 +270,7 @@ async def run_ocr_if_needed(
         max_pages: Maximum pages to OCR for cost control
         
     Returns:
-        OCR text to append, or empty string
+        OCRRunResult containing text (if any) and tile metadata
     """
     # Determine page_count once if not provided
     if page_count is None:
@@ -251,20 +296,27 @@ async def run_ocr_if_needed(
     
     if not should_ocr:
         logger.info(f"OCR SKIPPED: {reason}")
-        return ""
+        return OCRRunResult("", 0)
     
     logger.info(f"🎯 OCR TRIGGERED: {reason}")
     
     ocr_results = []
+    tiles_processed_total = 0
     
     # OCR up to max_pages
     pages_to_ocr = min(max_pages, page_count)
     for page_num in range(pages_to_ocr):
         try:
-            page_text = await ocr_page_with_tiling(client, pdf_path, page_num)
-            if page_text:
-                ocr_results.append(f"[OCR Page {page_num + 1}]:\n{page_text}")
-                logger.info(f"✅ OCR Page {page_num + 1}: Extracted {len(page_text)} characters")
+            page_result = await ocr_page_with_tiling(
+                client,
+                pdf_path,
+                page_num,
+                drawing_type=drawing_type,
+            )
+            tiles_processed_total += page_result.tiles_processed
+            if page_result.text:
+                ocr_results.append(f"[OCR Page {page_num + 1}]:\n{page_result.text}")
+                logger.info(f"✅ OCR Page {page_num + 1}: Extracted {len(page_result.text)} characters")
         except Exception as e:
             logger.warning(f"❌ OCR failed for page {page_num + 1}: {e}")
             # Continue with other pages
@@ -272,7 +324,8 @@ async def run_ocr_if_needed(
     if ocr_results:
         total_ocr_chars = sum(len(result) for result in ocr_results)
         logger.info(f"🎉 OCR COMPLETE: Added {total_ocr_chars} characters from {len(ocr_results)} pages")
-        return "\n\n=== OCR EXTRACTED CONTENT ===\n\n" + "\n\n".join(ocr_results)
+        combined_text = "\n\n=== OCR EXTRACTED CONTENT ===\n\n" + "\n\n".join(ocr_results)
+        return OCRRunResult(combined_text, tiles_processed_total)
     
     logger.warning("⚠️ OCR triggered but no text extracted")
-    return ""
+    return OCRRunResult("", tiles_processed_total)

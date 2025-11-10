@@ -237,6 +237,7 @@ def process_architectural_drawing(parsed_data, file_path, output_folder):
     """
     Process architectural drawing data and generate room template files.
     """
+    os.makedirs(output_folder, exist_ok=True)
     # Get drawing metadata from various possible locations
     drawing_metadata = {}
     metadata_keys = ["DRAWING_METADATA", "metadata", "drawing_info"]
