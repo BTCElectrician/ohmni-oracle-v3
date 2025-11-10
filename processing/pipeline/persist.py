@@ -250,7 +250,7 @@ async def step_save_metadata(
             "revision_hint": version_folder,
         },
         "structured_output": structured_section,
-        "templates": {
+        "room_data": {
             "directory": {
                 "path": templates_folder,  # Central room-data folder: output/room-data/<drawing_slug>/
                 "relative_path": relative_to_output_root(templates_folder, output_base_folder),
