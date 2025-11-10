@@ -68,6 +68,9 @@ Requirements:
 - Top-level keys: DRAWING_METADATA + one MAIN_CATEGORY (ARCHITECTURAL | ELECTRICAL | MECHANICAL | PLUMBING | OTHER).
 - Schedules → arrays of row objects. Specs/notes → keep hierarchy.
 - If ARCHITECTURAL floor plan: include ARCHITECTURAL.ROOMS[] with room_number, room_name, dimensions.
+- Room identifiers may be numeric or alphanumeric. Accept values like "118", "PS 1", "MECH-01", "CORR A".
+- Preserve whitespace/hyphenation for room_number exactly as shown on the sheet.
+- If no formal room number exists, reuse the room_name as room_number so downstream templates never skip the room.
 - Return ONLY the JSON.
 """
 

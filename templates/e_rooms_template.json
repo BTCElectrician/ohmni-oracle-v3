@@ -7,117 +7,17 @@
     "template_status": "in_progress",
     "template_author": "",
     "template_last_modified": "",
-    "circuits": {
-        "lighting": [],
+    "systems": {
         "power": [],
+        "lighting": [],
         "emergency": [],
-        "critical": [],
-        "ups": []
+        "fire_alarm": [],
+        "low_voltage": [],
+        "mechanical": [],
+        "special": []
     },
-    "light_fixtures": {
-        "fixture_ids": [],
-        "fixture_count": {},
-        "fixture_notes": "",
-        "emergency_fixtures": []
-    },
-    "outlets": {
-        "regular_outlets": 0,
-        "controlled_outlets": 0,
-        "gfci_outlets": 0,
-        "usb_outlets": 0,
-        "floor_outlets": 0,
-        "isolated_ground": 0,
-        "hospital_grade": 0,
-        "red_outlets": 0
-    },
-    "switches": {
-        "count": 0,
-        "type": "",
-        "model": "",
-        "dimming": "",
-        "occupancy_sensor": false,
-        "daylight_sensor": false,
-        "location_notes": ""
-    },
-    "data": 0,
-    "floor_boxes": 0,
-    "mechanical_equipment": [],
-    "appliances": [],
-    "fire_alarm": {
-        "smoke_detectors": {"count": 0, "type": "", "locations": []},
-        "heat_detectors": {"count": 0, "type": "", "locations": []},
-        "pull_stations": {"count": 0, "locations": []},
-        "horn_strobes": {"count": 0, "type": "", "locations": []},
-        "strobes_only": {"count": 0, "locations": []},
-        "speakers": {"count": 0, "type": "", "locations": []},
-        "panel_zone": "",
-        "circuit": ""
-    },
-    "data_telecom": {
-        "data_outlets": 0,
-        "phone_outlets": 0,
-        "fiber_outlets": 0,
-        "wireless_ap": false,
-        "patch_panel_home_run": ""
-    },
-    "security": {
-        "cameras": {"count": 0, "type": "", "locations": [], "ptz": false},
-        "card_readers": {"count": 0, "type": "", "locations": []},
-        "door_contacts": {"count": 0, "locations": []},
-        "motion_detectors": {"count": 0, "locations": []},
-        "panic_buttons": {"count": 0, "locations": []},
-        "intercom": false
-    },
-    "audiovisual": {
-        "displays": {"count": 0, "size": [], "locations": []},
-        "projectors": {"count": 0, "locations": []},
-        "speakers": {"count": 0, "type": "", "locations": []},
-        "microphones": {"count": 0, "type": "", "locations": []},
-        "control_panel": false,
-        "wall_plates": {"count": 0, "type": ""},
-        "rack_location": ""
-    },
-    "nurse_call": {
-        "stations": {"count": 0, "type": "", "locations": []},
-        "pull_cords": {"count": 0, "locations": []},
-        "dome_lights": {"count": 0, "locations": []},
-        "code_blue_buttons": {"count": 0, "locations": []}
-    },
-    "medical_gas": {
-        "oxygen": {"count": 0, "locations": []},
-        "vacuum": {"count": 0, "locations": []},
-        "medical_air": {"count": 0, "locations": []},
-        "nitrous_oxide": {"count": 0, "locations": []},
-        "wagd": {"count": 0, "locations": []},
-        "alarm_panel": false
-    },
-    "lab_systems": {
-        "fume_hood": false,
-        "biosafety_cabinet": false,
-        "lab_gas": [],
-        "emergency_shower": false,
-        "eye_wash": false,
-        "deionized_water": false,
-        "compressed_air": false,
-        "vacuum": false
-    },
-    "data_center": {
-        "rack_count": 0,
-        "rack_pdu_type": "",
-        "ups_fed": false,
-        "generator_fed": false,
-        "hvac_crac": false,
-        "environmental_monitoring": false,
-        "leak_detection": false,
-        "epo_button": false
-    },
-    "kitchen_systems": {
-        "hood_suppression": false,
-        "grease_trap_alarm": false,
-        "gas_detection": false,
-        "refrigeration_alarm": false
-    },
-    "discrepancies": [],
-    "field_notes": "",
-    "photos": []
-} 
+    "notes": {
+        "field": "",
+        "photos": []
+    }
+}

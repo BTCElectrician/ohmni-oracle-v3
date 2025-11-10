@@ -2,8 +2,24 @@ import json
 import os
 import logging
 import copy  # Added for deepcopy
+import re
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_identifier_value(value: str) -> str:
+    """Normalize whitespace while preserving meaningful alphanumeric identifiers."""
+    if not value:
+        return ""
+    return re.sub(r"\s+", " ", str(value).strip())
+
+
+def _slugify_identifier(value: str) -> str:
+    """Create a filesystem-safe identifier fragment."""
+    if not value:
+        return "UNIDENTIFIED"
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", value.upper()).strip("_")
+    return slug or "UNIDENTIFIED"
 
 
 def load_template(template_name):
@@ -146,7 +162,7 @@ def generate_rooms_data(parsed_data, room_type):
         room_number_str = ""
         for key in room_keys["number"]:
             if key in parsed_room and parsed_room[key]:
-                room_number_str = str(parsed_room[key])
+                room_number_str = _normalize_identifier_value(str(parsed_room[key]))
                 if room_number_str.startswith("Room_"):
                     room_number_str = room_number_str.replace("Room_", "")
                 break
@@ -155,22 +171,35 @@ def generate_rooms_data(parsed_data, room_type):
         room_name = ""
         for key in room_keys["name"]:
             if key in parsed_room and parsed_room[key]:
-                room_name = str(parsed_room[key])
+                room_name = _normalize_identifier_value(str(parsed_room[key]))
                 break
 
-        # Skip rooms without numbers
+        if not room_number_str and room_name:
+            room_number_str = room_name
+            logger.info(
+                "Room missing explicit number; using name as identifier: %s",
+                room_name,
+            )
+
+        # Skip rooms without identifiers
         if not room_number_str:
             logger.warning(f"Skipping room missing number: {parsed_room}")
             continue
+
+        room_identifier_slug = _slugify_identifier(room_number_str)
 
         # Create a new room entry from the template
         room_data = copy.deepcopy(base_template)
 
         # Set required fields
-        room_data["room_id"] = f"Room_{room_number_str}"
-        room_data["room_name"] = (
-            f"{room_name}_{room_number_str}" if room_name else f"Room_{room_number_str}"
-        )
+        room_data["room_id"] = f"Room_{room_identifier_slug}"
+        room_data["room_number"] = room_number_str
+
+        if room_name and room_name.lower() != room_number_str.lower():
+            room_label = f"{room_name}_{room_number_str}"
+        else:
+            room_label = room_name or f"Room_{room_number_str}"
+        room_data["room_name"] = room_label
 
         # Copy other fields that match template structure
         for key, value in parsed_room.items():
@@ -242,6 +271,17 @@ def process_architectural_drawing(parsed_data, file_path, output_folder):
     e_rooms_data = generate_rooms_data(parsed_data, "e_rooms")
     a_rooms_data = generate_rooms_data(parsed_data, "a_rooms")
 
+    # Attach source document reference so templates know their origin
+    source_document_info = parsed_data.get("source_document")
+    if not source_document_info:
+        source_document_info = {
+            "filename": os.path.basename(file_path),
+            "local_path": file_path,
+        }
+
+    e_rooms_data["source_document"] = source_document_info
+    a_rooms_data["source_document"] = source_document_info
+
     # Ensure metadata is propagated to template files
     if drawing_metadata:
         # Update metadata in output if it wasn't already populated
@@ -285,4 +325,5 @@ def process_architectural_drawing(parsed_data, file_path, output_folder):
         "a_rooms_file": a_rooms_file,
         "is_reflected_ceiling": is_reflected_ceiling,
         "room_count": len(a_rooms_data["rooms"]),
+        "generated_files": [e_rooms_file, a_rooms_file],
     }

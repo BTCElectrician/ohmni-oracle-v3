@@ -69,39 +69,41 @@ async def main_async():
 
         # 2) Create OpenAI Client (v1.66.3)
         client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        try:
+            # 3) Record start time
+            start_time = time.time()
 
-        # 3) Record start time
-        start_time = time.time()
+            # 4) Run asynchronous job processing
+            await process_job_site_async(job_folder, output_folder, client)
 
-        # 4) Run asynchronous job processing
-        await process_job_site_async(job_folder, output_folder, client)
+            # 5) Calculate total processing time
+            total_time = time.time() - start_time
+            logging.info(f"Total processing time: {total_time:.2f} seconds")
 
-        # 5) Calculate total processing time
-        total_time = time.time() - start_time
-        logging.info(f"Total processing time: {total_time:.2f} seconds")
+            # 6) Generate performance report
+            tracker = get_tracker()
+            tracker.log_report()
 
-        # 6) Generate performance report
-        tracker = get_tracker()
-        tracker.log_report()
+            # Save metrics to file for historical comparison
+            metrics_file = tracker.save_metrics_v2(output_folder, run_id)
+            if not metrics_file:
+                logging.warning(
+                    "Failed to save performance metrics - check permissions and disk space"
+                )
 
-        # Save metrics to file for historical comparison
-        metrics_file = tracker.save_metrics_v2(output_folder, run_id)
-        if not metrics_file:
-            logging.warning(
-                "Failed to save performance metrics - check permissions and disk space"
-            )
+            # Check for API performance degradation
+            slowdown = tracker.detect_api_slowdown(threshold_percent=40.0)
+            if slowdown:
+                logging.warning(
+                    f"API PERFORMANCE ALERT: {slowdown['percent_increase']:.1f}% slower than historical average"
+                )
+                logging.warning(
+                    f"Current avg: {slowdown['current_avg']:.2f}s, Historical avg: {slowdown['historical_avg']:.2f}s"
+                )
 
-        # Check for API performance degradation
-        slowdown = tracker.detect_api_slowdown(threshold_percent=40.0)
-        if slowdown:
-            logging.warning(
-                f"API PERFORMANCE ALERT: {slowdown['percent_increase']:.1f}% slower than historical average"
-            )
-            logging.warning(
-                f"Current avg: {slowdown['current_avg']:.2f}s, Historical avg: {slowdown['historical_avg']:.2f}s"
-            )
-
-        return 0
+            return 0
+        finally:
+            await client.close()
     except Exception as e:
         logging.error(f"Unhandled exception in main process: {str(e)}")
         return 1

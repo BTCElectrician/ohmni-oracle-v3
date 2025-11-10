@@ -2,12 +2,17 @@
 Test to ensure API metrics are not double-counted.
 """
 import asyncio
-import types
+from pathlib import Path
+import sys
 from unittest.mock import Mock, AsyncMock, patch
 import pytest
 
-from utils.performance_utils import get_tracker, PerformanceTracker
-from services.ai_service import make_responses_api_request
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from utils.performance_utils import PerformanceTracker
+from services.ai_service import make_chat_completion_request
 
 
 class FakeUsage:
@@ -17,10 +22,19 @@ class FakeUsage:
         self.total_tokens = 30
 
 
+class FakeMessage:
+    def __init__(self, content: str):
+        self.content = content
+
+
+class FakeChoice:
+    def __init__(self, content: str):
+        self.message = FakeMessage(content)
+
+
 class FakeResponse:
     def __init__(self):
-        self.output_text = '{"test": "response"}'
-        self.output = None
+        self.choices = [FakeChoice('{"test": "response"}')]
         self.usage = FakeUsage()
         self.id = "test-response-id"
         self.model = "gpt-5-mini"
@@ -36,7 +50,9 @@ async def test_single_api_metric_count():
     with patch('services.ai_service.get_tracker', return_value=test_tracker):
         # Create a mock OpenAI client
         mock_client = AsyncMock()
-        mock_client.responses.create = AsyncMock(return_value=FakeResponse())
+        mock_client.chat = Mock()
+        mock_client.chat.completions = Mock()
+        mock_client.chat.completions.create = AsyncMock(return_value=FakeResponse())
         
         # Make a single API request
         messages = [
@@ -44,7 +60,7 @@ async def test_single_api_metric_count():
             {"role": "user", "content": "Extract data from this drawing."}
         ]
         
-        response = await make_responses_api_request(
+        response = await make_chat_completion_request(
             client=mock_client,
             input_text=messages[-1]["content"],
             model="gpt-5-mini",
@@ -87,7 +103,9 @@ async def test_multiple_api_calls_correct_count():
     with patch('services.ai_service.get_tracker', return_value=test_tracker):
         # Create a mock OpenAI client
         mock_client = AsyncMock()
-        mock_client.responses.create = AsyncMock(return_value=FakeResponse())
+        mock_client.chat = Mock()
+        mock_client.chat.completions = Mock()
+        mock_client.chat.completions.create = AsyncMock(return_value=FakeResponse())
         
         messages = [
             {"role": "system", "content": "You are a helpful assistant. Return JSON."},
@@ -96,7 +114,7 @@ async def test_multiple_api_calls_correct_count():
         
         # Make 3 API requests
         for i in range(3):
-            await make_responses_api_request(
+            await make_chat_completion_request(
                 client=mock_client,
                 input_text=messages[-1]["content"],
                 model="gpt-5-mini",

@@ -6,6 +6,7 @@ Features: 10% tile overlap ensures no text loss at boundaries, systematic covera
 import base64
 import logging
 import os
+from typing import Any
 import pymupdf as fitz  # Match repo's import style
 from openai import AsyncOpenAI
 
@@ -17,6 +18,43 @@ DPI = int(os.getenv("OCR_DPI", "300"))  # 300 DPI is sufficient for text
 MODEL = os.getenv("OCR_MODEL", "gpt-4o-mini")  # Fast, cheap, accurate enough
 TOKENS_PER_TILE = int(os.getenv("OCR_TOKENS_PER_TILE", "3000"))  # Enough for full page
 OVERLAP_PERCENT = 0.1  # 10% overlap between tiles - proven to prevent text loss at boundaries
+
+
+def _collect_text_from_content(content: Any) -> str:
+    """Normalize Chat Completions message content payloads to plain text."""
+    if not content:
+        return ""
+
+    if isinstance(content, str):
+        return content.strip()
+
+    fragments: list[str] = []
+    items = content if isinstance(content, (list, tuple)) else [content]
+    for item in items:
+        text_value: str | None = None
+
+        if isinstance(item, dict):
+            if item.get("type") == "text":
+                text_value = item.get("text")
+            elif "text" in item:
+                text_field = item.get("text")
+                if isinstance(text_field, dict):
+                    text_value = text_field.get("value")
+                elif isinstance(text_field, str):
+                    text_value = text_field
+            elif "value" in item:
+                text_value = item.get("value")
+        else:
+            candidate = getattr(item, "text", None)
+            if isinstance(candidate, str):
+                text_value = candidate
+            elif hasattr(candidate, "value"):
+                text_value = getattr(candidate, "value", None)
+
+        if text_value:
+            fragments.append(str(text_value).strip())
+
+    return "\n".join(fragment for fragment in fragments if fragment).strip()
 
 
 def should_perform_ocr(extracted_text: str, pdf_path: str, page_count: int, ocr_enabled: bool = True, ocr_threshold: int = 1500) -> tuple[bool, str]:
@@ -130,51 +168,31 @@ async def ocr_page_with_tiling(
                     tile_pix = page.get_pixmap(matrix=matrix, clip=tile_rect, alpha=False)
                     img_b64 = base64.b64encode(tile_pix.tobytes("png")).decode()
                     
-                    # OCR via Responses API (vision)
-                    response = await client.responses.create(
+                    # OCR via Chat Completions vision endpoint
+                    response = await client.chat.completions.create(
                         model=MODEL,
-                        store=False,
-                        input=[
+                        messages=[
                             {
                                 "role": "user",
                                 "content": [
-                                    {"type": "input_text", "text": "Extract ALL text from this construction drawing section:"},
-                                    {"type": "input_image", "image_url": f"data:image/png;base64,{img_b64}"},
+                                    {
+                                        "type": "text",
+                                        "text": "Extract ALL text from this construction drawing section:",
+                                    },
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {"url": f"data:image/png;base64,{img_b64}"},
+                                    },
                                 ],
                             }
                         ],
-                        max_output_tokens=TOKENS_PER_TILE,
+                        max_tokens=TOKENS_PER_TILE,
                     )
 
-                    # Prefer output_text; fallback to collecting text from output items
-                    text = (getattr(response, "output_text", "") or "").strip()
-                    if not text:
-                        try:
-                            collected = []
-                            for item in (getattr(response, "output", []) or []):
-                                contents = (item.get("content") if isinstance(item, dict) else getattr(item, "content", None)) or []
-                                for c in contents:
-                                    tb = None
-                                    if isinstance(c, dict):
-                                        if "text" in c:
-                                            tfield = c["text"]
-                                            if isinstance(tfield, dict) and "value" in tfield:
-                                                tb = tfield.get("value")
-                                            elif isinstance(tfield, str):
-                                                tb = tfield
-                                        elif "value" in c:
-                                            tb = c.get("value")
-                                    else:
-                                        tf = getattr(c, "text", None)
-                                        if isinstance(tf, str):
-                                            tb = tf
-                                        elif hasattr(tf, "value"):
-                                            tb = getattr(tf, "value", None)
-                                    if tb:
-                                        collected.append(str(tb))
-                            text = "\n".join([s for s in collected if s]).strip()
-                        except Exception:
-                            text = ""
+                    choice = (getattr(response, "choices", None) or [None])[0]
+                    text = ""
+                    if choice and getattr(choice, "message", None):
+                        text = _collect_text_from_content(choice.message.content)
                     if text and text.strip():
                         ocr_texts.append(text.strip())
                         

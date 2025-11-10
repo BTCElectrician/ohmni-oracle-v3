@@ -5,7 +5,7 @@ import asyncio
 import uuid
 import time
 from enum import Enum
-from typing import Dict, Any, Optional, TypedDict, cast
+from typing import Dict, Any, Optional, TypedDict, cast, Iterable
 from tqdm.asyncio import tqdm
 
 from openai import AsyncOpenAI
@@ -26,6 +26,7 @@ from utils.drawing_utils import detect_drawing_info
 from utils.json_utils import parse_json_safely
 from schemas.metadata import DrawingMetadata
 from utils.exceptions import FileSystemError
+from utils.storage_utils import derive_drawing_identifiers, slugify_storage_component
 from config.settings import (
     get_enable_metadata_repair,
     ORIGINAL_STORAGE_BACKEND,
@@ -35,6 +36,13 @@ from config.settings import (
     AZURE_BLOB_CREDENTIAL,
     AZURE_BLOB_SAS_TOKEN,
     AZURE_BLOB_CONTAINER,
+    STRUCTURED_STORAGE_BACKEND,
+    STRUCTURED_STORAGE_PREFIX,
+    STRUCTURED_BLOB_CONNECTION_STRING,
+    STRUCTURED_BLOB_ACCOUNT_URL,
+    STRUCTURED_BLOB_CREDENTIAL,
+    STRUCTURED_BLOB_SAS_TOKEN,
+    STRUCTURED_BLOB_CONTAINER,
     FORCE_PANEL_OCR,
 )
 
@@ -64,6 +72,7 @@ class ProcessingState(TypedDict):
     parsed_json_data: Optional[Dict[str, Any]]
     final_status_dict: Optional[Dict[str, Any]]
     source_document_info: Optional[StoredFileInfo]
+    structured_document_info: Optional[StoredFileInfo]
 
 
 # TypedDict for result dictionary
@@ -76,6 +85,7 @@ class ProcessingResult(TypedDict):
     error: Optional[str]
     message: Optional[str]
     source_document: Optional[Dict[str, Any]]
+    structured_document: Optional[Dict[str, Any]]
 
 
 # Helper function moved outside of class for reuse
@@ -145,6 +155,7 @@ class FileProcessingPipeline:
         storage: FileSystemStorage,
         logger: logging.Logger,
         original_archiver: Optional[OriginalDocumentArchiver] = None,
+        structured_archiver: Optional[OriginalDocumentArchiver] = None,
     ):
         """
         Initialize the processing pipeline.
@@ -158,6 +169,7 @@ class FileProcessingPipeline:
             storage: FileSystemStorage instance for saving results
             logger: Logger instance for recording progress and errors
             original_archiver: Optional service for archiving original documents
+            structured_archiver: Optional service for archiving structured JSON output
         """
         if not os.path.exists(pdf_path):
             raise ValueError(f"PDF file does not exist: {pdf_path}")
@@ -168,6 +180,7 @@ class FileProcessingPipeline:
         self.storage: FileSystemStorage = storage
         self.logger: logging.Logger = logger
         self.original_archiver: Optional[OriginalDocumentArchiver] = original_archiver
+        self.structured_archiver: Optional[OriginalDocumentArchiver] = structured_archiver
         self.file_name: str = os.path.basename(pdf_path)
         self.pipeline_id: str = str(uuid.uuid4())
         
@@ -175,6 +188,8 @@ class FileProcessingPipeline:
         self.output_drawing_type_folder: str = drawing_type if drawing_type else "General"
         self.type_folder: str = os.path.join(output_folder, self.output_drawing_type_folder)
         os.makedirs(self.type_folder, exist_ok=True)
+        self.storage_discipline: str = slugify_storage_component(self.output_drawing_type_folder)
+        self.drawing_slug, self.version_folder = derive_drawing_identifiers(self.file_name)
         
         output_filename_base: str = os.path.splitext(self.file_name)[0]
         self.structured_output_path: str = os.path.join(
@@ -199,6 +214,7 @@ class FileProcessingPipeline:
             "parsed_json_data": None,
             "final_status_dict": None,
             "source_document_info": None,
+            "structured_document_info": None,
         }
 
     async def _save_pipeline_status(
@@ -224,6 +240,7 @@ class FileProcessingPipeline:
             "error": message if is_error else None,
             "message": message if not is_error else None,
             "source_document": self.processing_state.get("source_document_info"),
+            "structured_document": self.processing_state.get("structured_document_info"),
         }
         
         await _save_status_file(
@@ -683,9 +700,36 @@ class FileProcessingPipeline:
 
     def _build_archive_storage_name(self) -> str:
         """Build a storage path for the archived original document."""
-        safe_type = self.output_drawing_type_folder.replace(os.sep, "_") or "general"
-        unique_id = self.pipeline_id[:8]
-        return "/".join(filter(None, [safe_type, unique_id, self.file_name]))
+        components = [
+            self.storage_discipline,
+            self.drawing_slug,
+            self.version_folder,
+            self.file_name,
+        ]
+        return "/".join(filter(None, components))
+
+    def _build_structured_storage_name(self) -> str:
+        """Build a storage path for the structured JSON output."""
+        output_name = os.path.basename(self.structured_output_path)
+        components = [
+            self.storage_discipline,
+            self.drawing_slug,
+            self.version_folder,
+            "structured",
+            output_name,
+        ]
+        return "/".join(filter(None, components))
+
+    def _build_artifact_storage_name(self, filename: str, artifact_type: str) -> str:
+        """Build a storage path for additional structured artifacts (templates, OCR, etc.)."""
+        components = [
+            self.storage_discipline,
+            self.drawing_slug,
+            self.version_folder,
+            artifact_type,
+            filename,
+        ]
+        return "/".join(filter(None, components))
 
     def _attach_source_reference(self, stored_info: StoredFileInfo) -> None:
         """Attach source document metadata to the parsed JSON payload."""
@@ -709,6 +753,50 @@ class FileProcessingPipeline:
             source_document["storage_metadata"] = stored_info["metadata"]
 
         parsed_json["source_document"] = source_document
+
+    async def _archive_structured_output(self) -> Optional[StoredFileInfo]:
+        """Upload structured JSON output to configured archival storage (e.g., Azure Blob)."""
+        if not self.structured_archiver:
+            return None
+
+        if not os.path.exists(self.structured_output_path):
+            self.logger.warning(
+                "Structured output path %s missing when attempting archive",
+                self.structured_output_path,
+            )
+            return None
+
+        metadata = {
+            "content_type": "application/json",
+            "pipeline_id": self.pipeline_id,
+            "drawing_type": self.processing_state.get("processing_type_for_ai"),
+            "original_pdf": self.file_name,
+        }
+
+        try:
+            stored_info = await self.structured_archiver.archive(
+                self.structured_output_path,
+                storage_name=self._build_structured_storage_name(),
+                metadata=metadata,
+                content_type="application/json",
+            )
+        except Exception as exc:
+            self.logger.error(
+                "Failed to archive structured output for %s: %s",
+                self.file_name,
+                exc,
+                exc_info=True,
+            )
+            return None
+
+        stored_info.setdefault("filename", os.path.basename(self.structured_output_path))
+        stored_info.setdefault("content_type", "application/json")
+        self.processing_state["structured_document_info"] = stored_info
+        self.logger.info(
+            "Uploaded structured output to archival storage",
+            extra={"blob_uri": stored_info.get("uri"), "storage_name": stored_info.get("storage_name")},
+        )
+        return stored_info
 
     async def _archive_original_document(self) -> Optional[StoredFileInfo]:
         """Archive the original document if an archiver has been configured."""
@@ -760,6 +848,7 @@ class FileProcessingPipeline:
             )
             if self.processing_state["final_status_dict"]:
                 self.processing_state["final_status_dict"]["source_document"] = self.processing_state.get("source_document_info")
+                self.processing_state["final_status_dict"]["structured_document"] = self.processing_state.get("structured_document_info")
             return False
 
         if archived_info:
@@ -774,6 +863,7 @@ class FileProcessingPipeline:
                 raise FileSystemError("Storage backend reported failure while saving structured JSON output")
 
             self.logger.info(f"✅ Completed {self.file_name}")
+            structured_info = await self._archive_structured_output()
 
             self.processing_state["final_status_dict"] = {
                 "success": True,
@@ -783,6 +873,7 @@ class FileProcessingPipeline:
                 "error": None,
                 "message": "Processing completed successfully",
                 "source_document": archived_info or self.processing_state.get("source_document_info"),
+                "structured_document": structured_info or self.processing_state.get("structured_document_info"),
             }
 
             return True
@@ -801,7 +892,57 @@ class FileProcessingPipeline:
 
         if self.processing_state["final_status_dict"]:
             self.processing_state["final_status_dict"]["source_document"] = self.processing_state.get("source_document_info")
+            self.processing_state["final_status_dict"]["structured_document"] = self.processing_state.get("structured_document_info")
         return False
+
+    async def _archive_additional_artifacts(
+        self,
+        file_paths: Iterable[str],
+        *,
+        artifact_type: str,
+        content_type: str = "application/json",
+    ) -> None:
+        """Upload additional artifacts related to the drawing (e.g., room templates)."""
+        if not self.structured_archiver:
+            return
+
+        for artifact_path in file_paths:
+            if not artifact_path or not os.path.exists(artifact_path):
+                continue
+
+            metadata = {
+                "content_type": content_type,
+                "pipeline_id": self.pipeline_id,
+                "artifact_type": artifact_type,
+                "original_pdf": self.file_name,
+            }
+
+            storage_name = self._build_artifact_storage_name(
+                os.path.basename(artifact_path), artifact_type
+            )
+
+            try:
+                await self.structured_archiver.archive(
+                    artifact_path,
+                    storage_name=storage_name,
+                    metadata=metadata,
+                    content_type=content_type,
+                )
+                self.logger.info(
+                    "Uploaded %s artifact to archival storage",
+                    artifact_type,
+                    extra={
+                        "artifact_path": artifact_path,
+                        "storage_name": storage_name,
+                    },
+                )
+            except Exception as exc:
+                self.logger.error(
+                    "Failed to archive %s artifact %s: %s",
+                    artifact_type,
+                    artifact_path,
+                    exc,
+                )
 
     async def _step_generate_room_templates(self) -> None:
         """
@@ -826,6 +967,15 @@ class FileProcessingPipeline:
                 
                 self.processing_state["templates_created"]["floor_plan"] = True
                 self.logger.info(f"Created room templates: {result}")
+
+                artifact_paths = [
+                    result.get("e_rooms_file"),
+                    result.get("a_rooms_file"),
+                ]
+                await self._archive_additional_artifacts(
+                    artifact_paths,
+                    artifact_type="templates",
+                )
                 
             except Exception as e:
                 self.logger.error(f"Error creating room templates for {self.file_name}: {str(e)}")
@@ -919,7 +1069,11 @@ async def process_pdf_async(
     storage = FileSystemStorage(logger_instance)
 
     original_archiver: Optional[OriginalDocumentArchiver] = None
+    structured_archiver: Optional[OriginalDocumentArchiver] = None
     backend = (ORIGINAL_STORAGE_BACKEND or "filesystem").lower()
+    structured_backend = (STRUCTURED_STORAGE_BACKEND or "").lower()
+    if structured_backend in ("", "auto", "inherit"):
+        structured_backend = backend
 
     try:
         if backend in ("filesystem", "local"):
@@ -950,6 +1104,28 @@ async def process_pdf_async(
     except Exception as exc:
         logger_instance.error(f"Failed to initialize original document archiver: {exc}")
         raise
+
+    try:
+        if structured_backend in ("azure", "azure_blob", "azureblob"):
+            if not (STRUCTURED_BLOB_CONNECTION_STRING or STRUCTURED_BLOB_ACCOUNT_URL):
+                raise ValueError(
+                    "Structured output archival set to Azure, but no connection string or account URL provided"
+                )
+            structured_archiver = AzureBlobDocumentArchiver(
+                container_name=STRUCTURED_BLOB_CONTAINER or AZURE_BLOB_CONTAINER,
+                prefix=STRUCTURED_STORAGE_PREFIX,
+                connection_string=STRUCTURED_BLOB_CONNECTION_STRING or AZURE_BLOB_CONNECTION_STRING,
+                account_url=STRUCTURED_BLOB_ACCOUNT_URL or AZURE_BLOB_ACCOUNT_URL,
+                credential=STRUCTURED_BLOB_CREDENTIAL or AZURE_BLOB_CREDENTIAL,
+                sas_token=STRUCTURED_BLOB_SAS_TOKEN or AZURE_BLOB_SAS_TOKEN,
+                logger=logger_instance,
+            )
+        elif structured_backend in ("none", "disabled", "off", ""):
+            structured_archiver = None
+        # Filesystem/local storage already handled by FileSystemStorage save step
+    except Exception as exc:
+        logger_instance.error(f"Failed to initialize structured output archiver: {exc}")
+        raise
     
     try:
         pipeline = FileProcessingPipeline(
@@ -961,6 +1137,7 @@ async def process_pdf_async(
             storage,
             logger_instance,
             original_archiver=original_archiver,
+            structured_archiver=structured_archiver,
         )
         return await pipeline.process()
     except Exception as e:
@@ -989,4 +1166,13 @@ async def process_pdf_async(
             "output_file": error_output_path,
             "message": None,
             "source_document": None,
+            "structured_document": None,
         }
+    finally:
+        for archiver in (original_archiver, structured_archiver):
+            if not archiver:
+                continue
+            try:
+                await archiver.close()
+            except Exception as exc:  # pragma: no cover - best-effort cleanup
+                logger_instance.warning(f"Failed to close archiver: {exc}")

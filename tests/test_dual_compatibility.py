@@ -1,143 +1,90 @@
 """
-Test dual compatibility of Responses API for GPT-4.x and GPT-5 models.
+Regression tests ensuring Chat Completions parameters stay consistent across models.
 """
+from __future__ import annotations
+
+import sys
+from pathlib import Path
 import pytest
-import os
-from unittest.mock import Mock, AsyncMock, patch
-from services.ai_service import make_responses_api_request
+from unittest.mock import Mock, AsyncMock
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from services.ai_service import make_chat_completion_request
+
+
+class _FakeMessage:
+    def __init__(self, content: str):
+        self.content = content
+
+
+class _FakeChoice:
+    def __init__(self, content: str):
+        self.message = _FakeMessage(content)
+
+
+class _FakeUsage:
+    prompt_tokens = 10
+    completion_tokens = 20
+    total_tokens = 30
+
+
+class _FakeResponse:
+    def __init__(self, content: str = '{"ok": true}'):
+        self.choices = [_FakeChoice(content)]
+        self.usage = _FakeUsage()
+        self.id = "chatcmpl-test"
+        self.model = "gpt-4.1-mini"
+
+
+def _build_client(fake_response: _FakeResponse) -> Mock:
+    client = Mock()
+    client.chat = Mock()
+    client.chat.completions = Mock()
+    client.chat.completions.create = AsyncMock(return_value=fake_response)
+    return client
 
 
 @pytest.mark.asyncio
-async def test_gpt4_includes_response_format():
-    """Test that GPT-4.x models include response_format parameter."""
-    client = Mock()
-    client.responses = Mock()
-    client.responses.create = AsyncMock()
-    
-    # Mock response
-    mock_response = Mock()
-    mock_response.output_text = '{"test": "data"}'
-    client.responses.create.return_value = mock_response
-    
-    # Test with GPT-4.1-mini
-    await make_responses_api_request(
+@pytest.mark.parametrize("model_name", ["gpt-4.1-mini", "gpt-5-mini"])
+async def test_all_models_request_json_response_format(model_name: str) -> None:
+    """All chat completion calls must enforce JSON output formatting."""
+    client = _build_client(_FakeResponse())
+
+    await make_chat_completion_request(
         client=client,
         input_text="test input",
+        model=model_name,
+        temperature=0.2,
+        max_tokens=128,
+        file_path="/tmp/test.pdf",
+        drawing_type="Architectural",
+        instructions="Return JSON.",
+    )
+
+    kwargs = client.chat.completions.create.call_args.kwargs
+    assert kwargs["response_format"] == {"type": "json_object"}
+    assert kwargs["model"] == model_name
+    assert kwargs["max_tokens"] == 128
+
+
+@pytest.mark.asyncio
+async def test_chat_completion_returns_message_content() -> None:
+    """Helper should surface the string content produced by the API."""
+    fake_content = '{"rooms": []}'
+    client = _build_client(_FakeResponse(content=fake_content))
+
+    result = await make_chat_completion_request(
+        client=client,
+        input_text="extract rooms",
         model="gpt-4.1-mini",
-        temperature=0.5,
-        max_tokens=100
+        temperature=0.0,
+        max_tokens=256,
+        file_path="drawing.pdf",
+        drawing_type="Architectural",
+        instructions="Return JSON.",
     )
-    
-    # Verify response_format was included
-    call_args = client.responses.create.call_args[1]
-    assert "response_format" in call_args
-    assert call_args["response_format"] == {"type": "json_object"}
 
-
-@pytest.mark.asyncio
-async def test_gpt5_excludes_response_format():
-    """Test that GPT-5 models exclude response_format parameter."""
-    client = Mock()
-    client.responses = Mock()
-    client.responses.create = AsyncMock()
-    
-    # Mock response
-    mock_response = Mock()
-    mock_response.output_text = '{"test": "data"}'
-    client.responses.create.return_value = mock_response
-    
-    # Test with GPT-5-mini
-    await make_responses_api_request(
-        client=client,
-        input_text="test input",
-        model="gpt-5-mini",
-        temperature=0.5,
-        max_tokens=100
-    )
-    
-    # Verify response_format was NOT included
-    call_args = client.responses.create.call_args[1]
-    assert "response_format" not in call_args
-
-
-def test_validate_reasoning_effort():
-    """Test the reasoning effort validation function."""
-    from services.ai_service import _validate_reasoning_effort
-    
-    # Test valid values
-    with patch.dict(os.environ, {"GPT5_REASONING_EFFORT": "minimal"}):
-        assert _validate_reasoning_effort() == "minimal"
-    
-    with patch.dict(os.environ, {"GPT5_REASONING_EFFORT": "HIGH"}):
-        assert _validate_reasoning_effort() == "high"  # Should be lowercased
-    
-    # Test invalid value (should default to minimal)
-    with patch.dict(os.environ, {"GPT5_REASONING_EFFORT": "invalid"}):
-        assert _validate_reasoning_effort() == "minimal"
-    
-    # Test with inline comment
-    with patch.dict(os.environ, {"GPT5_REASONING_EFFORT": "medium # this is a comment"}):
-        assert _validate_reasoning_effort() == "medium"
-    
-    # Test default when not set
-    with patch.dict(os.environ, {}, clear=True):
-        assert _validate_reasoning_effort() == "minimal"
-
-
-@pytest.mark.asyncio
-async def test_gpt5_full_includes_reasoning_effort():
-    """Test that only full GPT-5 model includes reasoning.effort."""
-    with patch.dict(os.environ, {"GPT5_REASONING_EFFORT": "minimal"}):
-        client = Mock()
-        client.responses = Mock()
-        client.responses.create = AsyncMock()
-        
-        # Mock response
-        mock_response = Mock()
-        mock_response.output_text = '{"test": "data"}'
-        client.responses.create.return_value = mock_response
-        
-        # Test with full GPT-5
-        await make_responses_api_request(
-            client=client,
-            input_text="test input",
-            model="gpt-5",
-            temperature=0.5,
-            max_tokens=100
-        )
-        
-        # Verify reasoning.effort was included
-        call_args = client.responses.create.call_args[1]
-        assert "reasoning" in call_args
-        assert call_args["reasoning"]["effort"] == "minimal"
-
-
-@pytest.mark.asyncio
-async def test_gpt5_mini_excludes_reasoning_effort():
-    """Test that GPT-5-mini excludes reasoning.effort."""
-    with patch.dict(os.environ, {"GPT5_REASONING_EFFORT": "minimal"}):
-        client = Mock()
-        client.responses = Mock()
-        client.responses.create = AsyncMock()
-        
-        # Mock response
-        mock_response = Mock()
-        mock_response.output_text = '{"test": "data"}'
-        client.responses.create.return_value = mock_response
-        
-        # Test with GPT-5-mini
-        await make_responses_api_request(
-            client=client,
-            input_text="test input",
-            model="gpt-5-mini",
-            temperature=0.5,
-            max_tokens=100
-        )
-        
-        # Verify reasoning.effort was NOT included
-        call_args = client.responses.create.call_args[1]
-        assert "reasoning" not in call_args
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    assert result == fake_content

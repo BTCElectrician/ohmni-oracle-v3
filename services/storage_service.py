@@ -11,6 +11,7 @@ import datetime  # Add this import for date/datetime handling
 import hashlib
 import mimetypes
 from pathlib import Path
+import inspect
 
 
 class StorageService(ABC):
@@ -243,6 +244,10 @@ class OriginalDocumentArchiver(ABC):
     def __init__(self, logger: Optional[logging.Logger] = None):
         self.logger = logger or logging.getLogger(self.__class__.__name__)
 
+    async def close(self) -> None:
+        """Release any acquired IO resources (default: no-op)."""
+        return None
+
     @abstractmethod
     async def archive(
         self,
@@ -390,10 +395,19 @@ class AzureBlobDocumentArchiver(OriginalDocumentArchiver):
             return
         try:
             from azure.core.exceptions import ResourceExistsError
-
-            await self._container_client.create_container()
+            exists = await self._container_client.exists()
+            if not exists:
+                await self._container_client.create_container()
+            else:
+                self.logger.debug(
+                    "Azure container %s already exists; skipping creation",
+                    getattr(self._container_client, "container_name", "unknown"),
+                )
         except ResourceExistsError:  # Container already exists
-            pass
+            self.logger.debug(
+                "Azure container %s already exists (ResourceExistsError)",
+                getattr(self._container_client, "container_name", "unknown"),
+            )
         self._container_created = True
 
     async def archive(
@@ -486,3 +500,18 @@ class AzureBlobDocumentArchiver(OriginalDocumentArchiver):
         )
 
         return result
+
+    async def close(self) -> None:
+        """Close Azure async clients to prevent resource leaks."""
+        for client in (getattr(self, "_container_client", None), getattr(self, "_service_client", None)):
+            if not client:
+                continue
+            closer = getattr(client, "close", None)
+            if not closer:
+                continue
+            try:
+                maybe_awaitable = closer()
+                if inspect.isawaitable(maybe_awaitable):
+                    await maybe_awaitable
+            except Exception as exc:  # pragma: no cover - best-effort cleanup
+                self.logger.warning("Failed to close Azure blob client: %s", exc)
