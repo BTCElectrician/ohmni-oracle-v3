@@ -216,8 +216,147 @@ cat /path/to/output/metrics/metrics_*.json
 - Describe expected vs. actual performance
 - Provide document types and sizes
 
+## 🏗️ Performance Tracking Architecture
+
+### Module Structure
+
+The performance tracking system has been modularized into a focused package structure for better maintainability and extensibility:
+
+```
+utils/performance/
+├── __init__.py          # Public API exports
+├── config.py            # Environment variables and constants
+├── pricing.py           # Model pricing tables and overrides
+├── data_models.py      # Type definitions (TypedDicts)
+├── tracker.py          # Core PerformanceTracker class
+├── decorators.py        # @time_operation and context managers
+├── aggregations.py      # Pure functions for cost/OCR/scaling analysis
+├── reporting.py         # Log formatting and output
+└── persistence.py       # Save/load/compare with pluggable storage
+```
+
+### Backward Compatibility
+
+The original `utils.performance_utils` import path is maintained through a thin facade module. All existing code continues to work without changes:
+
+```python
+# These imports still work exactly as before
+from utils.performance_utils import (
+    tracker,
+    get_tracker,
+    time_operation,
+    time_operation_context,
+    PerformanceTracker,
+)
+```
+
+### Module Responsibilities
+
+#### `config.py`
+- Environment variable loading
+- Baseline constants (BASELINE_AVG_TIME, etc.)
+- Workday and storage configuration
+
+#### `pricing.py`
+- Default Tier-4 pricing tables
+- JSON override support via `METRIC_PRICING_OVERRIDES` env var
+- Model pricing lookup
+
+#### `tracker.py`
+- Core `PerformanceTracker` class
+- Metric collection and storage
+- API statistics tracking
+- Report generation (delegates to aggregations)
+
+#### `decorators.py`
+- `@time_operation` decorator (sync/async support)
+- `time_operation_context` context manager
+- Unified context extraction from function arguments
+
+#### `aggregations.py`
+- Pure functions following RORO pattern
+- Cost analysis (`calculate_cost_analysis`)
+- OCR decision logging (`build_ocr_decision_log`)
+- Token statistics (`calculate_token_statistics`)
+- Scaling projections (`build_scaling_projections`)
+- Baseline comparison (`build_baseline_comparison`)
+
+#### `reporting.py`
+- Log formatting (`log_report`)
+- Structured output formatting
+
+#### `persistence.py`
+- Save/load metrics (`save_metrics`, `load_metrics`)
+- Metrics comparison (`compare_metrics`)
+- Pluggable storage interface (`MetricsWriter` protocol)
+
+### Extension Points
+
+#### Custom Storage Backend
+
+To add blob storage or other custom storage:
+
+```python
+from utils.performance.persistence import set_writer, MetricsWriter
+
+class BlobStorageWriter:
+    def write(self, file_path: str, data: dict) -> bool:
+        # Upload to blob storage
+        blob_client.upload(data, file_path)
+        return True
+
+set_writer(BlobStorageWriter())
+```
+
+#### Custom Pricing Override
+
+Via environment variable:
+
+```bash
+METRIC_PRICING_OVERRIDES='{"gpt-4.1": {"input": 2.5, "output": 10.0}}'
+```
+
+Or programmatically:
+
+```python
+from utils.performance.pricing import PRICING_TIER_4
+PRICING_TIER_4["custom-model"] = {"input": 1.0, "output": 4.0}
+```
+
+#### Custom Aggregations
+
+All aggregation functions are pure and can be extended:
+
+```python
+from utils.performance.aggregations import calculate_cost_analysis
+
+# Use directly with custom metrics
+cost_analysis, file_costs = calculate_cost_analysis(my_metrics)
+```
+
+### Future-Proofing Considerations
+
+The modular design anticipates:
+- **Smarter AI models**: Pricing tables easily updated
+- **Cheaper models**: New models can be added without code changes
+- **Cloud storage**: Pluggable writer interface ready
+- **Advanced analytics**: Pure aggregation functions enable new analysis types
+- **Testing**: Each module can be tested independently
+
+### Migration Notes
+
+No migration required! The facade module ensures complete backward compatibility. However, new code can import directly from `utils.performance`:
+
+```python
+# New code (optional)
+from utils.performance import tracker, time_operation
+
+# Existing code (still works)
+from utils.performance_utils import tracker, time_operation
+```
+
 ---
 
 **Last Updated**: December 2025  
-**Version**: 1.0  
+**Version**: 2.0 (Modularized)  
 **Maintainer**: Development Team
