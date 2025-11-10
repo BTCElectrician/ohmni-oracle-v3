@@ -22,6 +22,32 @@ def _slugify_identifier(value: str) -> str:
     return slug or "UNIDENTIFIED"
 
 
+def _looks_like_dimension_label(s: str) -> bool:
+    """
+    Heuristic filter to exclude dimension or measurement callouts that the AI sometimes
+    misclassifies as rooms (e.g., \"15' - 0\\\"\", \"20' x 30'\", \"DIMENSION 13' - 3 1/2\\\"\").
+    """
+    if not s:
+        return False
+    s_norm = str(s).strip()
+    s_upper = s_norm.upper()
+    # Explicit dimension keywords
+    if "DIMENSION" in s_upper:
+        return True
+    # Foot/inch markers near digits (e.g., 15' - 0", 20' x 30', 9'-6")
+    if re.search(r"[0-9]\s*(?:'|FT)\b", s_upper):
+        return True
+    if re.search(r"[0-9]\s*(?:\"|IN)\b", s_upper):
+        return True
+    # Common patterns like 20' x 30' or 10'‑0"
+    if re.search(r"[0-9]+\s*'\s*[xX×]\s*[0-9]+\s*'", s_upper):
+        return True
+    # If it contains both foot and inch markers anywhere
+    if ("'" in s_norm or "FT" in s_upper) and ("\"" in s_norm or "IN" in s_upper):
+        return True
+    return False
+
+
 def load_template(template_name):
     current_dir = os.path.dirname(os.path.abspath(__file__))
     template_path = os.path.join(current_dir, f"{template_name}_template.json")
@@ -57,10 +83,10 @@ def generate_rooms_data(parsed_data, room_type):
         "rooms": [],
     }
 
-    # SEARCH STRATEGY: Check multiple locations for room data
+    # SEARCH STRATEGY: Prefer strict sources to avoid false positives (e.g., dimensions)
     parsed_rooms = []
 
-    # 1. Check primary expected location
+    # 1) Strict: ARCHITECTURAL.ROOMS
     if (
         "ARCHITECTURAL" in parsed_data
         and isinstance(parsed_data.get("ARCHITECTURAL"), dict)
@@ -70,12 +96,12 @@ def generate_rooms_data(parsed_data, room_type):
         parsed_rooms = parsed_data["ARCHITECTURAL"]["ROOMS"]
         logger.info(f"Found {len(parsed_rooms)} rooms in ARCHITECTURAL.ROOMS")
 
-    # 2. Check if rooms are in a top-level array
+    # 2) Conservative fallbacks (optional)
+    # Only consider top-level 'rooms' or 'room_information.rooms' to avoid picking up
+    # arbitrary arrays with 'name' fields (like DIMENSIONS). These are still filtered below.
     elif "rooms" in parsed_data and isinstance(parsed_data.get("rooms"), list):
         parsed_rooms = parsed_data.get("rooms", [])
         logger.info(f"Found {len(parsed_rooms)} rooms in top-level 'rooms' array")
-
-    # 3. Check if rooms are in room_information
     elif (
         "room_information" in parsed_data
         and isinstance(parsed_data.get("room_information"), dict)
@@ -85,66 +111,25 @@ def generate_rooms_data(parsed_data, room_type):
         parsed_rooms = parsed_data["room_information"]["rooms"]
         logger.info(f"Found {len(parsed_rooms)} rooms in room_information.rooms")
 
-    # 4. Check if rooms are directly in ARCHITECTURAL
-    elif (
-        "ARCHITECTURAL" in parsed_data
-        and isinstance(parsed_data.get("ARCHITECTURAL"), dict)
-        and any(
-            k.lower().startswith("room") for k in parsed_data["ARCHITECTURAL"].keys()
-        )
-    ):
-        # Look for room arrays in ARCHITECTURAL
-        for key, value in parsed_data["ARCHITECTURAL"].items():
-            if isinstance(value, list) and key.lower().startswith("room"):
-                parsed_rooms = value
-                logger.info(f"Found {len(parsed_rooms)} rooms in ARCHITECTURAL.{key}")
-                break
-
-    # 5. Look for any array of objects that look like rooms
-    if not parsed_rooms:
-        for key, value in parsed_data.items():
-            if (
-                isinstance(value, list)
-                and len(value) > 0
-                and isinstance(value[0], dict)
-            ):
-                # Check if these look like rooms (have room_number or name keys)
-                room_keys = ["room_number", "number", "room_name", "name", "room"]
-                if any(rk in value[0] for rk in room_keys):
-                    parsed_rooms = value
-                    logger.info(f"Found {len(parsed_rooms)} possible rooms in {key}")
-                    break
-
-    # If we still don't have rooms, try one more fallback:
-    # Look for room-like keys in ARCHITECTURAL
-    if not parsed_rooms and "ARCHITECTURAL" in parsed_data:
-        arch_data = parsed_data["ARCHITECTURAL"]
-        room_candidate_keys = [
-            k
-            for k in arch_data.keys()
-            if k.lower().startswith("room") or "room" in k.lower()
-        ]
-
-        for key in room_candidate_keys:
-            value = arch_data[key]
-            if isinstance(value, list) and len(value) > 0:
-                parsed_rooms = value
-                logger.info(f"Found {len(parsed_rooms)} rooms in ARCHITECTURAL.{key}")
-                break
-
     # If no rooms found through any method, log a warning
     if not parsed_rooms:
         drawing_num = metadata.get("drawing_number", "N/A")
         logger.warning(
             f"No rooms found in parsed data for {room_type}. File: {drawing_num}"
         )
-        structure_info = list(parsed_data.keys())
-        if "ARCHITECTURAL" in parsed_data:
-            structure_info.append(
-                f"ARCHITECTURAL keys: {list(parsed_data['ARCHITECTURAL'].keys())}"
-            )
-        logger.warning(f"JSON structure: {structure_info}")
+        try:
+            structure_info = list(parsed_data.keys())
+            if "ARCHITECTURAL" in parsed_data and isinstance(parsed_data["ARCHITECTURAL"], dict):
+                structure_info.append(
+                    f"ARCHITECTURAL keys: {list(parsed_data['ARCHITECTURAL'].keys())}"
+                )
+            logger.warning(f"JSON structure: {structure_info}")
+        except Exception:  # pragma: no cover
+            pass
         return rooms_data_output
+
+    # Deduplicate by canonical room identifier
+    seen_identifiers = set()
 
     # Process all found rooms
     for parsed_room in parsed_rooms:
@@ -174,6 +159,15 @@ def generate_rooms_data(parsed_data, room_type):
                 room_name = _normalize_identifier_value(str(parsed_room[key]))
                 break
 
+        # Filter out obvious dimension-like labels before fallbacking to use name
+        if room_name and _looks_like_dimension_label(room_name):
+            logger.info("Skipping dimension-like entry detected as 'room_name': %s", room_name)
+            room_name = ""
+
+        if room_number_str and _looks_like_dimension_label(room_number_str):
+            logger.info("Skipping dimension-like entry detected as 'room_number': %s", room_number_str)
+            room_number_str = ""
+
         if not room_number_str and room_name:
             room_number_str = room_name
             logger.info(
@@ -187,6 +181,11 @@ def generate_rooms_data(parsed_data, room_type):
             continue
 
         room_identifier_slug = _slugify_identifier(room_number_str)
+
+        # Dedup if we've already seen this identifier
+        if room_identifier_slug in seen_identifiers:
+            continue
+        seen_identifiers.add(room_identifier_slug)
 
         # Create a new room entry from the template
         room_data = copy.deepcopy(base_template)

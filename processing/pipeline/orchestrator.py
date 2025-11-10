@@ -46,15 +46,16 @@ class PipelineContext:
         self.storage_discipline = slugify_storage_component(self.output_drawing_type_folder)
         self.drawing_slug, self.version_folder = derive_drawing_identifiers(self.file_name)
         self.drawing_folder = os.path.join(self.type_folder, self.drawing_slug)
-        self.structured_folder = os.path.join(self.drawing_folder, "structured")
-        self.templates_folder = os.path.join(self.drawing_folder, "templates")
         self.meta_file_path = os.path.join(self.drawing_folder, "meta.json")
-        for folder in (self.drawing_folder, self.structured_folder, self.templates_folder):
-            os.makedirs(folder, exist_ok=True)
+        os.makedirs(self.drawing_folder, exist_ok=True)
+        
+        # Central room-data folder path (only created if templates are generated)
+        self.templates_central_folder = os.path.join(self.output_base_folder, "room-data", self.drawing_slug)
 
         output_filename_base = os.path.splitext(self.file_name)[0]
+        # Flatten structured output - no nested structured/ folder
         self.structured_output_path = os.path.join(
-            self.structured_folder, f"{output_filename_base}_structured.json"
+            self.drawing_folder, f"{output_filename_base}_structured.json"
         )
         self.error_output_path = os.path.join(
             self.drawing_folder, f"{output_filename_base}_error.json"
@@ -174,7 +175,7 @@ async def process_pipeline(
             # Step 7: Generate room templates (optional)
             state = await step_generate_room_templates(
                 state, services, context.pdf_path, context.file_name,
-                context.templates_folder, context.pipeline_id,
+                context.templates_central_folder, context.pipeline_id,
                 context.storage_discipline, context.drawing_slug,
                 templates_created
             )
@@ -184,7 +185,7 @@ async def process_pipeline(
             state = await step_save_metadata(
                 state, services, context.pdf_path, context.file_name,
                 context.pipeline_id, context.structured_output_path,
-                context.structured_folder, context.templates_folder,
+                context.drawing_folder, context.templates_central_folder,
                 context.meta_file_path, context.drawing_slug,
                 context.output_drawing_type_folder, context.version_folder,
                 context.output_base_folder

@@ -25,7 +25,7 @@ Core disciplines supported:
 - Robust metadata repair from title blocks with non-destructive fallback filling
 - JSON parsing with optional repair for tricky schedules
 - Discipline-specific normalization (panel, mechanical, plumbing)
-- Room file generation for Architectural floor plans
+- Room template generation for Architectural floor plans (detected by filename or metadata title)
 - AI response caching for 20–30x faster repeated runs
 - Performance metrics and slowdown detection
 - Clear status files for every outcome
@@ -154,20 +154,22 @@ python main.py <input_folder> [output_folder]
 - Plumbing: normalize fixtures, water heaters, and piping fields
 
 7) Output & Templates
-- Saves structured JSON to <output>/<Type>/<file>_structured.json
+- Saves structured JSON to <output>/<Type>/<drawing_slug>/<file>_structured.json (flattened layout, no nested structured/ folder)
 - Architectural floor plans trigger room templates (templates/room_templates.py)
-  - Generates <file>_a_rooms_details.json and <file>_e_rooms_details.json
+  - Generates templates in shared location: <output>/room-data/<drawing_slug>/<file>_a_rooms_details.json and <file>_e_rooms_details.json
+  - Floor plan detection: checks filename for "floor" OR metadata title for "FLOOR"/"LEVEL"
 - If unreadable/no content, saved status explains why and processing stops early
 
 ## Output and Status Files
 
-- Success: <output>/<Type>/<name>_structured.json (success=true)
-- Unreadable: <output>/<Type>/<name>_structured.json (status="skipped_unreadable", success=true)
-- Extraction failed: <output>/<Type>/<name>_error.json (status="extraction_failed")
-- AI/JSON failed: <output>/<Type>/<name>_error.json (status="ai_processing_failed"), may save a raw response file
-- Save failed: <output>/<Type>/<name>_error.json (status="json_save_failed")
-- Unexpected: <output>/<Type>/<name>_error.json (status="unexpected_error")
-- Room files (Architectural): <output>/Architectural/<name>_a_rooms_details.json and _e_rooms_details.json
+- Success: <output>/<Type>/<drawing_slug>/<name>_structured.json (success=true)
+- Unreadable: <output>/<Type>/<drawing_slug>/<name>_structured.json (status="skipped_unreadable", success=true)
+- Extraction failed: <output>/<Type>/<drawing_slug>/<name>_error.json (status="extraction_failed")
+- AI/JSON failed: <output>/<Type>/<drawing_slug>/<name>_error.json (status="ai_processing_failed"), may save a raw response file
+- Save failed: <output>/<Type>/<drawing_slug>/<name>_error.json (status="json_save_failed")
+- Unexpected: <output>/<Type>/<drawing_slug>/<name>_error.json (status="unexpected_error")
+- Metadata manifest: <output>/<Type>/<drawing_slug>/meta.json
+- Room templates (Architectural floor plans only): <output>/room-data/<drawing_slug>/<name>_a_rooms_details.json and <name>_e_rooms_details.json
 - Logs: <output>/logs/...; Performance metrics: <output>/metrics/...
 
 Status values are defined in processing/file_processor.py (ProcessingStatus enum).

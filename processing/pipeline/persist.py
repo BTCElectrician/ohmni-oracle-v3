@@ -204,6 +204,7 @@ async def step_save_metadata(
 
     from processing.pipeline.paths import relative_to_output_root, iso_timestamp
 
+    # structured_folder is now the drawing_folder (flattened layout)
     structured_section: Dict[str, Any] = {
         "directory": {
             "path": structured_folder,
@@ -251,7 +252,7 @@ async def step_save_metadata(
         "structured_output": structured_section,
         "templates": {
             "directory": {
-                "path": templates_folder,
+                "path": templates_folder,  # Central room-data folder: output/room-data/<drawing_slug>/
                 "relative_path": relative_to_output_root(templates_folder, output_base_folder),
             },
             "flags": dict(state.get("templates_created", {})),

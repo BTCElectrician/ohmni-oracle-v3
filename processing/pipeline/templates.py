@@ -47,8 +47,21 @@ async def step_generate_room_templates(
     """
     logger = services["logger"]
     
-    if state["processing_type_for_ai"] == "Architectural" and "floor" in file_name.lower():
+    # Enhanced floor plan detection: check filename and metadata title
+    meta = (state.get("parsed_json_data") or {}).get("DRAWING_METADATA", {})
+    meta_title = str(meta.get("title", "")).upper()
+    looks_like_floor = (
+        "floor" in file_name.lower() or 
+        "FLOOR" in meta_title or 
+        "LEVEL" in meta_title
+    )
+    
+    if state["processing_type_for_ai"] == "Architectural" and looks_like_floor:
         try:
+            # Create room-data folder only when we're actually generating templates
+            import os
+            os.makedirs(templates_folder, exist_ok=True)
+            
             from templates.room_templates import process_architectural_drawing
             
             result = process_architectural_drawing(
