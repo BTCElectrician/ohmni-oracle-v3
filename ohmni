@@ -28,6 +28,38 @@ print_error() {
     echo -e "${RED}❌ $1${NC}"
 }
 
+ensure_repo_ready() {
+    if [ ! -f "main.py" ]; then
+        print_error "main.py not found. Please run this command from the ohmni-oracle-v3 directory"
+        print_info "Current directory: $(pwd)"
+        return 1
+    fi
+
+    if [ -z "$VIRTUAL_ENV" ]; then
+        print_warning "Virtual environment not active. Activating..."
+        if [ -f "venv/bin/activate" ]; then
+            # shellcheck disable=SC1091
+            source venv/bin/activate
+            print_success "Virtual environment activated"
+        else
+            print_error "Virtual environment not found. Run 'make setup' first"
+            return 1
+        fi
+    fi
+    return 0
+}
+
+load_search_env() {
+    if [ -z "$AZURE_SEARCH_ENDPOINT" ] || [ -z "$AZURE_SEARCH_API_KEY" ]; then
+        if [ -f ".env" ]; then
+            set -a
+            # shellcheck disable=SC1091
+            source .env
+            set +a
+        fi
+    fi
+}
+
 # Function to show help
 show_help() {
     echo "Ohmni Oracle v3 - Document Processing Tool"
@@ -35,6 +67,8 @@ show_help() {
     echo "Usage:"
     echo "  ohmni process <folder_name>     Process documents in a folder"
     echo "  ohmni file <folder/file>        Process a single file within a folder"
+    echo "  ohmni search <folder_name>      Run schedule post-pass + upload to Azure Search"
+    echo "  ohmni search-templates <folder> Refresh templates only + incremental upload"
     echo "  ohmni help                      Show this help message"
     echo ""
     echo "Examples:"
@@ -74,23 +108,8 @@ process_folder() {
         return 1
     fi
     
-    # Check if we're in the right directory (ohmni-oracle-v3)
-    if [ ! -f "main.py" ]; then
-        print_error "main.py not found. Please run this command from the ohmni-oracle-v3 directory"
-        print_info "Current directory: $(pwd)"
+    if ! ensure_repo_ready; then
         return 1
-    fi
-    
-    # Check if virtual environment is active
-    if [ -z "$VIRTUAL_ENV" ]; then
-        print_warning "Virtual environment not active. Activating..."
-        if [ -f "venv/bin/activate" ]; then
-            source venv/bin/activate
-            print_success "Virtual environment activated"
-        else
-            print_error "Virtual environment not found. Run 'make setup' first"
-            return 1
-        fi
     fi
     
     # Set output folder (same as input with /output suffix)
@@ -101,6 +120,9 @@ process_folder() {
     print_info "Output path: $output_path"
     echo ""
     
+    # Load environment (so storage/search creds are available)
+    load_search_env
+
     # Run the main script
     print_success "Starting Ohmni Oracle v3 processing..."
     python3 main.py "$full_path" "$output_path"
@@ -129,23 +151,8 @@ process_file() {
         return 1
     fi
     
-    # Check if we're in the right directory (ohmni-oracle-v3)
-    if [ ! -f "main.py" ]; then
-        print_error "main.py not found. Please run this command from the ohmni-oracle-v3 directory"
-        print_info "Current directory: $(pwd)"
+    if ! ensure_repo_ready; then
         return 1
-    fi
-    
-    # Check if virtual environment is active
-    if [ -z "$VIRTUAL_ENV" ]; then
-        print_warning "Virtual environment not active. Activating..."
-        if [ -f "venv/bin/activate" ]; then
-            source venv/bin/activate
-            print_success "Virtual environment activated"
-        else
-            print_error "Virtual environment not found. Run 'make setup' first"
-            return 1
-        fi
     fi
     
     # Extract folder and file info
@@ -191,6 +198,85 @@ process_file() {
     return $exit_code
 }
 
+run_search_pipeline() {
+    local folder_name="$1"
+    local mode="$2" # full | templates
+    local desktop_path="/Users/collin/Desktop"
+    local full_path="$desktop_path/$folder_name"
+
+    if [ ! -d "$full_path" ]; then
+        print_error "Folder '$folder_name' not found in Desktop"
+        print_info "Available folders:"
+        ls -1 "$desktop_path" | grep -v "^\.$" | grep -v "^\.\.$" | while read folder; do
+            if [ -d "$desktop_path/$folder" ]; then
+                echo "  📁 $folder"
+            fi
+        done
+        return 1
+    fi
+
+    if ! ensure_repo_ready; then
+        return 1
+    fi
+
+    local sheet_dir="$full_path/output/json"
+    local templates_root="$full_path/templates_run"
+    local postpass_dir="$full_path/output/postpass"
+
+    if [ ! -d "$sheet_dir" ]; then
+        print_error "Sheet JSON directory not found: $sheet_dir"
+        print_info "Run 'ohmni process $folder_name' first."
+        return 1
+    fi
+
+    if [ ! -d "$templates_root" ]; then
+        print_error "Templates directory not found: $templates_root"
+        print_info "Ensure foreman templates are copied to templates_run/."
+        return 1
+    fi
+
+    mkdir -p "$postpass_dir"
+
+    local project_id="${OHMNI_PROJECT_ID:-$(echo "$folder_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')}"
+    local transform_cmd=(python3 tools/schedule_postpass/transform.py "$sheet_dir" "$postpass_dir" "$project_id" --templates-root "$templates_root")
+    if [ "$mode" = "templates" ]; then
+        transform_cmd+=("--templates-only")
+    fi
+
+    print_info "Generating search documents (mode: $mode)..."
+    "${transform_cmd[@]}"
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        print_error "Post-pass transform failed (exit code: $exit_code)"
+        return $exit_code
+    fi
+
+    load_search_env
+    if [ -z "$AZURE_SEARCH_ENDPOINT" ] || [ -z "$AZURE_SEARCH_API_KEY" ]; then
+        print_error "Azure Search credentials missing. Set AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY in your environment or .env file."
+        return 1
+    fi
+
+    local upsert_cmd=(python3 tools/schedule_postpass/upsert_index.py --schema tools/schedule_postpass/unified_index.schema.json --templates "$postpass_dir/templates.jsonl")
+    if [ "$mode" = "templates" ]; then
+        upsert_cmd+=(--mode incremental)
+    else
+        upsert_cmd+=(--synonyms tools/schedule_postpass/synonyms.seed.json --sheets "$postpass_dir/sheets.jsonl" --facts "$postpass_dir/facts.jsonl" --mode full)
+    fi
+
+    print_info "Uploading to Azure Search ($( [ "$mode" = "templates" ] && echo "incremental" || echo "full" ))..."
+    "${upsert_cmd[@]}"
+    exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        print_error "Azure Search upload failed (exit code: $exit_code)"
+        return $exit_code
+    fi
+
+    print_success "Azure Search load complete!"
+    print_info "Post-pass outputs located at: $postpass_dir"
+    return 0
+}
+
 # Main script logic
 case "$1" in
     "process")
@@ -210,6 +296,24 @@ case "$1" in
             exit 1
         fi
         process_file "$2"
+        ;;
+    "search")
+        if [ -z "$2" ]; then
+            print_error "Please specify a folder name"
+            echo ""
+            show_help
+            exit 1
+        fi
+        run_search_pipeline "$2" "full"
+        ;;
+    "search-templates")
+        if [ -z "$2" ]; then
+            print_error "Please specify a folder name"
+            echo ""
+            show_help
+            exit 1
+        fi
+        run_search_pipeline "$2" "templates"
         ;;
     "help"|"--help"|"-h")
         show_help

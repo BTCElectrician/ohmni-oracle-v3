@@ -1,0 +1,107 @@
+# Schedule Post-Pass (Unified Index)
+
+## TL;DR
+- Keep **SHEET** docs as-is (current per-sheet JSON + `content`).
+- Emit one **FACT** doc per **schedule row** into the **same index** (`doc_type="fact"`).
+- Emit one **TEMPLATE** doc per room using the `templates/e_rooms_template.json` + `templates/a_rooms_template.json` scaffolds (foreman editable, `doc_type="template"`).
+- Index name: `drawings_unified`.
+
+## 1) Run the transformer
+Templates live under `/path/to/templates_run` (e.g., `templates_run/electrical/E2.03/A4.json`); keep copying the repo defaults forward and extend them as needed.
+
+```bash
+python tools/schedule_postpass/transform.py \
+  /path/to/sheet_json_folder \
+  /tmp/out \
+  veridian \
+  --templates-root /path/to/templates_run
+```
+
+Generates embeddings for vector search using OpenAI `text-embedding-3-large`.
+Embedding cost: ~$0.78 per 12-story building (one-time, updates only changed docs).
+
+To update *only* foreman-edited room templates (skipping sheet/fact reprocessing):
+
+```bash
+python tools/schedule_postpass/transform.py \
+  /path/to/sheet_json_folder \
+  /tmp/out \
+  veridian \
+  --templates-root /path/to/templates_run \
+  --templates-only
+```
+
+Outputs:
+
+- `/tmp/out/sheets.jsonl`
+- `/tmp/out/facts.jsonl`
+- `/tmp/out/templates.jsonl`
+- `/tmp/out/coverage_report.csv` (expanded metrics + template coverage)
+
+## 2) Create the index & upload docs
+
+Set env vars:
+
+```bash
+export AZURE_SEARCH_ENDPOINT="https://<service>.search.windows.net"
+export AZURE_SEARCH_API_KEY="<key>"
+export INDEX_NAME="drawings_unified"
+```
+
+Create + upload (Full rebuild):
+
+```bash
+python tools/schedule_postpass/upsert_index.py \
+  --schema ./tools/schedule_postpass/unified_index.schema.json \
+  --synonyms ./tools/schedule_postpass/synonyms.seed.json \
+  --sheets /tmp/out/sheets.jsonl \
+  --facts  /tmp/out/facts.jsonl \
+  --templates /tmp/out/templates.jsonl \
+  --mode full
+```
+
+Create + upload (Incremental template sync):
+
+```bash
+python tools/schedule_postpass/upsert_index.py \
+  --schema ./tools/schedule_postpass/unified_index.schema.json \
+  --templates /tmp/out/templates.jsonl \
+  --mode incremental
+```
+
+> When a foreman tweaks a single room, rerun `transform.py --templates-only ...` to refresh `/tmp/out/templates.jsonl`, then call the uploader with `--mode incremental` so you don’t recycle the whole index mid-day.
+
+## 3) Attach synonyms
+
+Passing `--synonyms ./tools/schedule_postpass/synonyms.seed.json` to `upsert_index.py` auto-creates/updates the `project-synonyms` map. If you prefer to manage maps in the portal, follow the manual steps below.
+
+1. In the Azure Portal, open your AI Search service.
+2. Go to **Synonym maps**.
+3. Create a new map (e.g., `project-synonyms-map`).
+4. Upload/copy the contents of `synonyms.seed.json` into it.
+5. Go to your `drawings_unified` **Index** → **Fields** and select the searchable fields (`content`, `project`, `sheet_number`, `sheet_title`, `key/panel`, `key/tag`, `attributes/description`, `room_id`, `room_name`, `template_tags`, etc.).
+6. In the **Synonym maps** dropdown for those fields, select your new `project-synonyms-map` and save.
+
+## 4) Quick checks (Developer Sanity Test)
+
+> `query_playbook.py` is a simple **developer sanity check**. Production query logic (facts-first with sheets fallback) remains in your Azure Function. This script just validates that `transform.py` and `upsert_index.py` worked.
+
+```bash
+python tools/schedule_postpass/query_playbook.py
+```
+
+Expected checks:
+
+- Dishwasher in Unit A4 → a `unit_plan` FACT
+- Signed-off templates in Unit A4 → a `template` doc
+- Panel S2 schedule → `panel` FACTs (from the filter)
+- Main Riser Diagram → likely a `sheet` doc as fallback
+
+## 5) Import order (recommended for full rebuild)
+
+1. Electrical **panel schedules** (all rows)
+2. **Unit plan schedule** (appliances: DW/Range/WH/Dryer)
+3. Mechanical **equipment** schedule
+4. **Lighting** fixture schedule
+5. Architectural: **wall/partition**, **door**, **ceiling**, **finish**
+6. **Templates** (must be last so the latest foreman edit is indexed)

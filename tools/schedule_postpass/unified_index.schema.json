@@ -1,0 +1,118 @@
+{
+  "name": "drawings_unified",
+  "fields": [
+    {"name":"id","type":"Edm.String","key":true,"searchable":false,"filterable":true,"sortable":false,"facetable":false},
+    {"name":"doc_type","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+
+    {"name":"template_type","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"template_id","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"room_id","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+    {"name":"room_name","type":"Edm.String","searchable":true,"filterable":true,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+    {"name":"template_status","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"template_author","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"template_last_modified","type":"Edm.DateTimeOffset","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+    {"name":"template_tags","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true,"synonymMaps":["project-synonyms"]},
+    {"name":"template_payload","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+
+    {"name":"project","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+    {"name":"project_id","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+
+    {"name":"sheet_number","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+    {"name":"sheet_title","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+    {"name":"discipline","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+
+    {"name":"revision","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"revision_date","type":"Edm.DateTimeOffset","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+
+    {"name":"levels","type":"Collection(Edm.String)","searchable":false,"filterable":true,"sortable":false,"facetable":true},
+
+    {"name":"source_file","type":"Edm.String","searchable":false,"filterable":false,"sortable":false,"facetable":false},
+
+    {"name":"content","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+    {"name":"content_vector","type":"Collection(Edm.Single)","searchable":true,"dimensions":3072,"vectorSearchProfile":"vprof","filterable":false,"sortable":false,"facetable":false},
+
+    {"name":"schedule_type","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+
+    {"name":"key","type":"Edm.ComplexType","fields":[
+      {"name":"panel","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"circuit","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"unit","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"tag","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"wall_type","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"fixture_type","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"door_number","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"ceiling_type","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]}
+    ]},
+
+    {"name":"attributes","type":"Edm.ComplexType","fields":[
+      {"name":"description","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+      {"name":"voltage","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+      {"name":"phase","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+      {"name":"rating_a","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+      {"name":"wire","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+      {"name":"conduit","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+      {"name":"hp","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+      {"name":"kw","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+      {"name":"kva","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+      {"name":"mca","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+      {"name":"mop","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+      {"name":"fla","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+      {"name":"busbar_a","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+      {"name":"disconnect","type":"Edm.String","searchable":true,"filterable":true,"sortable":false,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"panel","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"circuit","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      
+      {"name":"lumens","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+      {"name":"lamp_type","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"cct","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"cri","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"mounting","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"dimming","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      
+      {"name":"stc","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+      {"name":"fire_rating","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"stud_gauge","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+      {"name":"layers","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+      
+      {"name":"ceiling_height_in","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+      {"name":"finish_floor","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"finish_wall","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"finish_ceiling","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"acoustic","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+      {"name":"grid","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+
+      {"name":"hardware_set","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"size","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+      {"name":"material_frame","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+
+      {"name":"btu","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+      {"name":"gpm","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+      {"name":"head","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false}
+    ]},
+
+    {"name":"labels","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true,"synonymMaps":["project-synonyms"]},
+    {"name":"source_bbox","type":"Collection(Edm.Double)","searchable":false,"filterable":false,"sortable":false,"facetable":false}
+  ],
+  "vectorSearch": {
+    "algorithms": [{"name":"hnsw","kind":"hnsw","parameters":{"m":32,"efConstruction":400}}],
+    "profiles": [{"name":"vprof","algorithm":"hnsw","vectorizer":"none"}]
+  },
+  "semantic": {
+    "configurations": [{
+      "name": "semconf",
+      "prioritizedFields": {
+        "titleField": {"fieldName": "sheet_number"},
+        "contentFields": [{"fieldName":"content"}]
+      }
+    }]
+  },
+  "suggesters": [{
+    "name": "sg",
+    "searchMode": "analyzingInfixMatching",
+    "sourceFields": ["sheet_number","sheet_title","room_id","room_name","key/panel","key/tag"]
+  }],
+  "scoringProfiles": [{
+    "name":"freshness_boost",
+    "functions":[{"type":"freshness","fieldName":"revision_date","interpolation":"quadratic","boost":1.2,"freshness":{"boostingDuration":"P365D"}}]
+  }]
+}

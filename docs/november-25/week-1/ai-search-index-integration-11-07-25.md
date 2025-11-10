@@ -305,7 +305,7 @@ def sheet_meta(raw: Dict[str, Any], project_id: str) -> Dict[str, Any]:
     }
 
 def make_sheet_doc(meta: Dict[str, Any], raw_json: Dict[str, Any], client: Optional[OpenAI] = None) -> Dict[str, Any]:
-    return {
+    doc = {
         "id": f"{meta['project_id']}|{meta['sheet_number']}|{meta['revision']}",
         "doc_type": "sheet",
         "project": meta["project"],
@@ -320,6 +320,10 @@ def make_sheet_doc(meta: Dict[str, Any], raw_json: Dict[str, Any], client: Optio
         "content": meta["content"],
         "raw_json": raw_json # This will be popped by upsert_index.py
     }
+    embedding = generate_embedding(doc.get("content", ""), client)
+    if embedding:
+        doc["content_vector"] = embedding
+    return doc
 
 def leftpad_circuit(s: Any) -> str:
     try:
@@ -370,6 +374,9 @@ def emit_facts(raw_json: Dict[str, Any], meta: Dict[str, Any], client: Optional[
             # carry bbox if present on row
             if "bbox_norm" in row:
                 doc["source_bbox"] = row["bbox_norm"]
+            embedding = generate_embedding(summary, client)
+            if embedding:
+                doc["content_vector"] = embedding
             yield doc
 
 
@@ -421,6 +428,9 @@ def iter_template_docs(template_root: pathlib.Path,
             "content": summary,
             "template_payload": json.dumps(raw, ensure_ascii=False)
         }
+        embedding = generate_embedding(summary, client)
+        if embedding:
+            doc["content_vector"] = embedding
         yield doc
 
 
@@ -506,8 +516,6 @@ def main():
             raw = load_json(p)
             meta = sheet_meta(raw, project_id)
             sheet_doc = make_sheet_doc(meta, raw, embedding_client)
-            if (vector := generate_embedding(sheet_doc.get("content", ""), embedding_client)):
-                sheet_doc["content_vector"] = vector
             facts = list(emit_facts(raw, meta, embedding_client))
             
             # Find templates related to this sheet for coverage report
@@ -1052,7 +1060,7 @@ def derive_template_tags(raw: Dict[str, Any]) -> List[str]:
 
 ## 8\) `tools/schedule_postpass/upsert_index.py`
 
-Pass the new `templates.jsonl` file to the uploader so templates land in the same index. We also add a `--mode incremental` switch so foreman-only updates can skip the destructive index recreate.
+Pass the new `templates.jsonl` file to the uploader so templates land in the same index. We also add a `--mode incremental` switch so foreman-only updates can skip the destructive index recreate and automatically push the synonym map from `synonyms.seed.json`.
 
 ```python
 #!/usr/bin/env python3
@@ -1082,6 +1090,44 @@ def create_index(schema_path: pathlib.Path):
     if r.status_code not in (200, 201):
         raise RuntimeError(f"Index create failed: {r.status_code} {r.text}")
     print("Index created/replaced.")
+
+def create_synonym_map(synonyms_path: pathlib.Path):
+    url = f"{AZURE_SEARCH_ENDPOINT}/synonymmaps/project-synonyms?api-version=2024-07-01"
+    headers = {"Content-Type":"application/json","api-key":AZURE_SEARCH_API_KEY}
+    try:
+        raw_payload = json.loads(synonyms_path.read_text())
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Synonym file not found at {synonyms_path}")
+    except json.JSONDecodeError:
+        raise ValueError(f"Synonym file {synonyms_path} is not valid JSON.")
+
+    if isinstance(raw_payload, dict) and "synonyms" in raw_payload and isinstance(raw_payload["synonyms"], list):
+        lines = []
+        for entry in raw_payload["synonyms"]:
+            if not isinstance(entry, dict):
+                continue
+            from_terms = entry.get("from") or []
+            to_term = entry.get("to")
+            if from_terms and to_term:
+                lines.append(f"{', '.join(from_terms)} => {to_term}")
+        payload = {
+            "name": "project-synonyms",
+            "format": "solr",
+            "synonyms": "\n".join(lines)
+        }
+    else:
+        payload = raw_payload
+        payload.setdefault("name", "project-synonyms")
+        payload.setdefault("format", "solr")
+
+    print("Creating/updating synonym map 'project-synonyms'...")
+    r = requests.put(url, headers=headers, data=json.dumps(payload))
+    if r.status_code == 409:
+        headers["If-Match"] = "*"
+        r = requests.put(url, headers=headers, data=json.dumps(payload))
+    if r.status_code not in (200, 201):
+        raise RuntimeError(f"Synonym map create failed: {r.status_code} {r.text}")
+    print("Synonym map ready.")
 
 def upload_jsonl(jsonl_path: pathlib.Path, batch_size=1000):
     if not jsonl_path.exists():
@@ -1117,10 +1163,13 @@ def main():
     ap.add_argument("--sheets", required=False, default="", help="path to sheets.jsonl")
     ap.add_argument("--facts", required=False, default="", help="path to facts.jsonl")
     ap.add_argument("--templates", required=False, default="", help="path to templates.jsonl (new input)")
+    ap.add_argument("--synonyms", required=False, default="", help="path to synonyms.seed.json")
     ap.add_argument("--mode", default="full", choices=["full", "incremental"], help="upload mode: 'full' (recreate index) or 'incremental' (merge/upload only)")
     args = ap.parse_args()
 
     if args.mode == "full":
+        if args.synonyms:
+            create_synonym_map(pathlib.Path(args.synonyms))
         create_index(pathlib.Path(args.schema))
     else:
         print(f"Incremental mode selected: Skipping index creation/replacement.")
@@ -1145,6 +1194,8 @@ if __name__ == "__main__":
 ```python
 #!/usr/bin/env python3
 import os, json, requests, sys
+from typing import Optional, List
+from openai import OpenAI
 
 # --- Config ---
 ENDPOINT = os.environ["AZURE_SEARCH_ENDPOINT"]
@@ -1152,6 +1203,12 @@ API_KEY  = os.environ["AZURE_SEARCH_API_KEY"]
 INDEX    = os.environ.get("INDEX_NAME","drawings_unified")
 API_VER  = "2024-07-01"
 # --- End Config ---
+
+try:
+    EMBEDDING_CLIENT = OpenAI()
+except Exception as exc:
+    print(f"Warning: OpenAI client unavailable ({exc}). Vector queries disabled.", file=sys.stderr)
+    EMBEDDING_CLIENT = None
 
 def post_search(body: dict) -> dict:
     """Helper to post a search query and handle errors."""
@@ -1167,6 +1224,20 @@ def post_search(body: dict) -> dict:
             print(f"Response: {e.response.text}", file=sys.stderr)
         return {"value": []} # Return empty on failure
 
+def generate_query_embedding(text: str) -> Optional[List[float]]:
+    """Generate an embedding for hybrid search."""
+    if not EMBEDDING_CLIENT or not text or not text.strip():
+        return None
+    try:
+        resp = EMBEDDING_CLIENT.embeddings.create(
+            model="text-embedding-3-large",
+            input=text
+        )
+        return resp.data[0].embedding
+    except Exception as exc:
+        print(f"Embedding generation failed: {exc}", file=sys.stderr)
+        return None
+
 def unified_search(search_text, search_filter=None, top=25):
     """
     Searches facts first, then falls back to templates, then sheets if no facts are found.
@@ -1179,12 +1250,24 @@ def unified_search(search_text, search_filter=None, top=25):
     base_body = {
         "search": search_text,
         "top": top,
-        "queryType": "simple",
+        "queryType": "semantic",
         "semanticConfiguration": "semconf",
         "queryLanguage": "en-us",
         "includeTotalResultCount": True,
+        "captions": "extractive",
+        "answers": "extractive|count-3",
+        "highlightFields": "content",
+        "scoringProfile": "freshness_boost",
+        "facet": ["discipline","schedule_type","levels","template_status","doc_type","template_tags"],
         "select": "id,doc_type,project,sheet_number,sheet_title,discipline,schedule_type,key,attributes,labels,revision,source_file,content,template_type,room_id,template_status"
     }
+    query_vector = generate_query_embedding(search_text)
+    if query_vector:
+        base_body["vectorQueries"] = [{
+            "vector": query_vector,
+            "kNearestNeighborsCount": 50,
+            "fields": "content_vector"
+        }]
 
     # Order of search: 
     # 1. Facts (most granular)
@@ -1467,6 +1550,9 @@ python tools/schedule_postpass/transform.py \
   --templates-root /path/to/templates_run
 ````
 
+Generates embeddings for vector search using OpenAI `text-embedding-3-large`.
+Embedding cost: ~$0.78 per 12-story building (one-time, updates only changed docs).
+
 To update *only* foreman-edited room templates (skipping sheet/fact reprocessing):
 
 ```bash
@@ -1500,6 +1586,7 @@ Create + upload (Full rebuild):
 ```bash
 python tools/schedule_postpass/upsert_index.py \
   --schema ./tools/schedule_postpass/unified_index.schema.json \
+  --synonyms ./tools/schedule_postpass/synonyms.seed.json \
   --sheets /tmp/out/sheets.jsonl \
   --facts  /tmp/out/facts.jsonl \
   --templates /tmp/out/templates.jsonl \
@@ -1520,6 +1607,8 @@ python tools/schedule_postpass/upsert_index.py \
 > When a foreman tweaks a single room, rerun `transform.py --templates-only ...` to refresh `/tmp/out/templates.jsonl`, then call the uploader with `--mode incremental` so you don’t recycle the whole index mid-day.
 
 ## 3\) Attach synonyms
+
+> Passing `--synonyms ./tools/schedule_postpass/synonyms.seed.json` to `upsert_index.py` auto-creates/updates the `project-synonyms` map. If you prefer to manage maps in the portal, follow the manual steps below.
 
   * In the Azure Portal, find your AI Search service.
   * Go to **Synonym maps**.
