@@ -70,7 +70,7 @@ def test_mvp_metrics_sections_present_and_populated():
         file_path="/tmp/file1.pdf",
         drawing_type="Electrical",
         performed=True,
-        reason="char_density_low",
+        reason="Low density: 900 chars/page (needs OCR)",
         char_count_total=1800,
         char_count_threshold=1500,
         estimated_tokens=450,
@@ -84,7 +84,7 @@ def test_mvp_metrics_sections_present_and_populated():
         file_path="/tmp/file2.pdf",
         drawing_type="Mechanical",
         performed=False,
-        reason="sufficient_text_density",
+        reason="Sufficient text: 6000 chars (2100/page)",
         char_count_total=6000,
         char_count_threshold=1500,
         estimated_tokens=1500,
@@ -112,8 +112,15 @@ def test_mvp_metrics_sections_present_and_populated():
     file1_entry = _find_entry(ocr_log["by_file"], "file1.pdf")
     file2_entry = _find_entry(ocr_log["by_file"], "file2.pdf")
     assert file1_entry["ocr_triggered"] is True
+    assert file1_entry["trigger_reason"] == "char_density_low"
+    assert file1_entry["reason_detail"].startswith("Low density")
+    assert file1_entry["char_count"] == 1800
+    assert file1_entry["char_threshold"] == 1500
     assert file1_entry["tiles_processed"] >= 3
     assert file2_entry["ocr_triggered"] is False
+    assert file2_entry["trigger_reason"] == "sufficient_text"
+    assert file2_entry["char_count"] == 6000
+    assert file2_entry["char_threshold"] == 1500
 
     drawing_costs = report["drawing_type_costs"]
     assert drawing_costs["by_type"]["Electrical"]["count"] == 1
@@ -126,3 +133,31 @@ def test_mvp_metrics_sections_present_and_populated():
     baseline = report["baseline_comparison"]
     assert baseline["baseline"]["avg_time_per_drawing"] > 0
     assert isinstance(baseline["recommendation"], str)
+
+
+def test_ocr_decision_log_uses_file_cost_fallback_when_metrics_missing():
+    tracker = PerformanceTracker()
+    tracker.add_metric("total_processing", "/tmp/fallback.pdf", "Electrical", 60.0)
+
+    tracker.add_metric_with_context(
+        category="api_request",
+        duration=2.0,
+        file_path="/tmp/fallback.pdf",
+        drawing_type="Electrical",
+        model="gpt-4o-mini-ocr",
+        api_type="ocr_tile",
+        prompt_tokens=1000,
+        completion_tokens=500,
+        total_tokens=1500,
+        is_ocr=True,
+    )
+
+    report = tracker.report()
+    ocr_log = report["ocr_decision_log"]
+
+    assert ocr_log["by_file"], "Expected fallback OCR entries from cost data"
+    entry = _find_entry(ocr_log["by_file"], "fallback.pdf")
+    assert entry["trigger_reason"] == "missing_metrics"
+    assert entry["ocr_triggered"] is True
+    assert entry["char_count"] is None
+    assert entry["char_threshold"] is None

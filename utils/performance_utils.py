@@ -352,46 +352,110 @@ class PerformanceTracker:
 
         return cost_analysis, file_costs
 
+    @staticmethod
+    def _normalize_ocr_reason(reason: Optional[str]) -> str:
+        """Convert free-form OCR reason strings into stable enums."""
+        if not reason:
+            return "unknown"
+
+        text = " ".join(str(reason).strip().lower().split())
+        if not text:
+            return "unknown"
+
+        mappings = [
+            ("force_panel", "forced_panel_ocr"),
+            ("low density", "char_density_low"),
+            ("needs ocr", "char_density_low"),
+            ("minimal text", "low_total_chars"),
+            ("sufficient text", "sufficient_text"),
+            ("ocr disabled", "ocr_disabled"),
+            ("disabled in configuration", "ocr_disabled"),
+            ("ocr failed", "ocr_failure"),
+            ("skipped", "skipped"),
+        ]
+
+        for needle, label in mappings:
+            if needle in text:
+                return label
+
+        # Fallback: sanitize original reason into slug form
+        sanitized = "".join(ch if ch.isalnum() else "_" for ch in text)
+        sanitized = "_".join(filter(None, sanitized.split("_")))
+        return sanitized or "unknown"
+
     def _build_ocr_decision_log(
         self, file_costs: Dict[str, Dict[str, Any]]
     ) -> Dict[str, Any]:
         """Summarize OCR trigger decisions per file."""
         ocr_metrics = self.metrics.get("ocr_decision", [])
         by_file: List[Dict[str, Any]] = []
-        triggered = 0
 
         for metric in ocr_metrics:
-            file_name = metric.get("file_name") or "unknown"
+            file_name = metric.get("file_name") or metric.get("file_path") or "unknown"
             ocr_triggered = bool(metric.get("performed"))
-            if ocr_triggered:
-                triggered += 1
-
             file_cost_entry = file_costs.get(file_name, {})
+
+            char_count = metric.get("char_count_total")
+            if char_count is None:
+                char_count = metric.get("chars_extracted")
+            if char_count is None:
+                char_count = metric.get("total_chars_after_ocr")
+
+            char_threshold = metric.get("char_count_threshold")
+            if char_threshold is None:
+                char_threshold = metric.get("threshold_per_page")
+
             estimated_tokens = metric.get("estimated_tokens")
             if estimated_tokens is None:
-                chars = metric.get("char_count_total") or metric.get("chars_extracted") or 0
+                chars = char_count or 0
                 estimated_tokens = (
                     int(chars / METRICS_AVG_CHARS_PER_TOKEN) if chars else 0
                 )
+
+            reason_detail = metric.get("reason")
+            trigger_reason = self._normalize_ocr_reason(reason_detail)
 
             log_entry = {
                 "file_name": file_name,
                 "drawing_type": metric.get("drawing_type", "unknown"),
                 "ocr_triggered": ocr_triggered,
-                "trigger_reason": metric.get("reason"),
-                "char_count_total": metric.get("char_count_total", metric.get("chars_extracted")),
-                "char_count_threshold": metric.get("char_count_threshold", metric.get("threshold_per_page")),
+                "trigger_reason": trigger_reason,
+                "reason_detail": reason_detail,
+                "char_count": char_count,
+                "char_threshold": char_threshold,
+                # Backward-compatible fields
+                "char_count_total": char_count,
+                "char_count_threshold": char_threshold,
                 "estimated_tokens": estimated_tokens,
                 "token_threshold": metric.get("token_threshold", 0),
                 "ocr_duration_sec": metric.get("ocr_duration_seconds"),
                 "ocr_cost": file_cost_entry.get("ocr_cost", 0.0),
-                "tiles_processed": metric.get("tiles_processed", file_cost_entry.get("tiles_processed", 0)),
+                "tiles_processed": metric.get(
+                    "tiles_processed", file_cost_entry.get("tiles_processed", 0)
+                ),
                 "page_count": metric.get("page_count"),
                 "chars_per_page": metric.get("chars_per_page"),
             }
             by_file.append(log_entry)
 
+        if not by_file and file_costs:
+            for file_name, data in file_costs.items():
+                by_file.append(
+                    {
+                        "file_name": file_name,
+                        "drawing_type": data.get("drawing_type", "unknown"),
+                        "ocr_triggered": data.get("ocr_cost", 0.0) > 0.0,
+                        "trigger_reason": "missing_metrics",
+                        "reason_detail": "No OCR decision metrics recorded for this file",
+                        "char_count": None,
+                        "char_threshold": None,
+                        "ocr_cost": data.get("ocr_cost", 0.0),
+                        "tiles_processed": data.get("tiles_processed", 0),
+                    }
+                )
+
         total = len(by_file)
+        triggered = sum(1 for entry in by_file if entry.get("ocr_triggered"))
         skipped = max(total - triggered, 0)
         summary = {
             "total_files": total,
