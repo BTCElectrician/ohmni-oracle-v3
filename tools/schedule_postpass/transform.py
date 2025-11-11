@@ -308,7 +308,7 @@ def iter_template_docs(
 
                 doc = {
                     "id": make_document_id(project_id, agg_sheet_number, room_id, f"template-{template_type}"),
-                    "doc_type": "template",
+                    "doc_type": "room",
                     "tenant_id": tenant_id,
                     "project": project,
                     "project_id": project_id,
@@ -455,7 +455,7 @@ def iter_template_docs(
 
         doc = {
             "id": make_document_id(project_id, sheet_number, room_id, f"template-{template_type}"),
-            "doc_type": "template",
+            "doc_type": "room",
             "tenant_id": tenant_id,
             "project": project,
             "project_id": project_id,
