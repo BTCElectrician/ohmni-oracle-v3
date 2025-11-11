@@ -212,8 +212,12 @@ def build_ocr_decision_log(
         }
         by_file.append(log_entry)
 
-    if not by_file and file_costs:
+    # Include fallback entries for any files with API cost data but no OCR decision metrics
+    if file_costs:
+        present = {entry.get("file_name") for entry in by_file}
         for file_name, data in file_costs.items():
+            if file_name in present:
+                continue
             by_file.append(
                 {
                     "file_name": file_name,
@@ -500,4 +504,3 @@ def calculate_token_statistics(api_metrics: List[Dict[str, Any]]) -> Optional[Di
         result["per_model"] = per_model_stats
     
     return result
-

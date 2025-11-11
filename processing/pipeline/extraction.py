@@ -190,8 +190,8 @@ async def step_extract_content(
                     drawing_type=processing_drawing_type,
                     **ocr_decision_metrics,
                 )
-            except:
-                pass
+            except Exception as metric_err:
+                logger.warning(f"Failed to record OCR decision metrics: {metric_err}")
                 
         except Exception as e:
             ocr_duration = time.time() - ocr_start_time if 'ocr_start_time' in locals() else 0
@@ -218,8 +218,8 @@ async def step_extract_content(
                     drawing_type=processing_drawing_type,
                     **ocr_decision_metrics,
                 )
-            except:
-                pass
+            except Exception as metric_err:
+                logger.warning(f"Failed to record failed OCR decision metrics: {metric_err}")
     else:
         # OCR is disabled - still track the decision
         try:
@@ -232,8 +232,8 @@ async def step_extract_content(
                 drawing_type=processing_drawing_type,
                 **ocr_decision_metrics,
             )
-        except:
-            pass
+        except Exception as metric_err:
+            logger.warning(f"Failed to record OCR-disabled decision metrics: {metric_err}")
 
     if not extraction_result.success:
         from processing.pipeline.persist import save_pipeline_status
@@ -269,4 +269,3 @@ async def step_extract_content(
         # Continue processing despite validation failure
 
     return state, True
-
