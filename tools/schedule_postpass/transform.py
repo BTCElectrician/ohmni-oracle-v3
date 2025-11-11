@@ -287,7 +287,6 @@ def iter_template_docs(
             revision_date_top = _to_iso_date(
                 raw.get("revision_date") or meta_obj.get("date") or base_meta.get("revision_date")
             )
-
             for room in rooms_list:
                 room_id = room.get("room_id") or room.get("room_number") or path.stem
                 if not agg_sheet_number or not room_id:
