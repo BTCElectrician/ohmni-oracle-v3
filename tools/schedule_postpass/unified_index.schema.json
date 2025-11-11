@@ -3,6 +3,9 @@
   "fields": [
     {"name":"id","type":"Edm.String","key":true,"searchable":false,"filterable":true,"sortable":false,"facetable":false},
     {"name":"doc_type","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"tenant_id","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"project","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+    {"name":"project_id","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
 
     {"name":"template_type","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
     {"name":"template_id","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
@@ -13,9 +16,40 @@
     {"name":"template_last_modified","type":"Edm.DateTimeOffset","searchable":false,"filterable":true,"sortable":true,"facetable":false},
     {"name":"template_tags","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true,"synonymMaps":["project-synonyms"]},
     {"name":"template_payload","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+    {"name":"sheet_payload","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
 
-    {"name":"project","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
-    {"name":"project_id","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"square_footage","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"metrics_dimensions","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},
+    {"name":"ceiling_height","type":"Edm.String","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+
+    {"name":"ceiling_type","type":"Edm.String","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+    {"name":"walls","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+
+    {"name":"doors","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+    {"name":"doors_count","type":"Edm.Int32","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+
+    {"name":"systems_power","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+    {"name":"systems_lighting","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+    {"name":"systems_emergency","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+    {"name":"systems_fire_alarm","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+    {"name":"systems_low_voltage","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+    {"name":"systems_mechanical","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+    {"name":"systems_special","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+
+    {"name":"circuits","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+    {"name":"circuits_count","type":"Edm.Int32","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"outlet_types","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+    {"name":"outlets_count","type":"Edm.Int32","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"fixture_types","type":"Collection(Edm.String)","searchable":true,"filterable":true,"sortable":false,"facetable":true},
+    {"name":"fixtures_count","type":"Edm.Int32","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+
+    {"name":"notes_field","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false},
+    {"name":"notes_photo_urls","type":"Collection(Edm.String)","searchable":false,"filterable":false,"sortable":false,"facetable":false},
+
+    {"name":"source_pdf_blob_path","type":"Edm.String","searchable":false,"filterable":true,"sortable":false,"facetable":false},
+    {"name":"source_pdf_etag","type":"Edm.String","searchable":false,"filterable":true,"sortable":false,"facetable":false},
+    {"name":"source_structured_json_path","type":"Edm.String","searchable":false,"filterable":true,"sortable":false,"facetable":false},
+    {"name":"source_template_json_path","type":"Edm.String","searchable":false,"filterable":true,"sortable":false,"facetable":false},
 
     {"name":"sheet_number","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
     {"name":"sheet_title","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
@@ -94,15 +128,29 @@
     {"name":"source_bbox","type":"Collection(Edm.Double)","searchable":false,"filterable":false,"sortable":false,"facetable":false}
   ],
   "vectorSearch": {
-    "algorithms": [{"name":"hnsw","kind":"hnsw","parameters":{"m":32,"efConstruction":400}}],
-    "profiles": [{"name":"vprof","algorithm":"hnsw","vectorizer":"none"}]
+    "algorithms": [
+      {
+        "name": "hnsw",
+        "kind": "hnsw",
+        "hnswParameters": {
+          "m": 32,
+          "efConstruction": 400
+        }
+      }
+    ],
+    "profiles": [
+      {
+        "name": "vprof",
+        "algorithm": "hnsw"
+      }
+    ]
   },
   "semantic": {
     "configurations": [{
       "name": "semconf",
       "prioritizedFields": {
         "titleField": {"fieldName": "sheet_number"},
-        "contentFields": [{"fieldName":"content"}]
+        "prioritizedContentFields": [{"fieldName":"content"}]
       }
     }]
   },

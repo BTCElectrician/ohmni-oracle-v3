@@ -179,6 +179,14 @@ def sheet_meta(raw: Dict[str, Any], project_id: str) -> Dict[str, Any]:
 
 
 def make_sheet_doc(meta: Dict[str, Any], raw_json: Dict[str, Any], client: Optional[OpenAI]) -> Dict[str, Any]:
+    structured_payload = json.dumps(raw_json, ensure_ascii=False)
+    header_parts = [
+        f"Sheet {meta.get('sheet_number')}: {meta.get('sheet_title')}".strip(),
+        f"Discipline: {meta.get('discipline')}".strip(),
+        f"Revision: {meta.get('revision')} ({meta.get('revision_date')})".strip(),
+    ]
+    header_text = " | ".join([part for part in header_parts if part])
+    combined_content = "\n".join(filter(None, [header_text, structured_payload]))
     doc_id = make_document_id(meta.get("project_id"), meta.get("sheet_number") or "sheet", meta.get("revision") or "rev")
     doc = {
         "id": doc_id,
@@ -193,8 +201,8 @@ def make_sheet_doc(meta: Dict[str, Any], raw_json: Dict[str, Any], client: Optio
         "revision_date": meta["revision_date"],
         "levels": meta["levels"],
         "source_file": meta["source_file"],
-        "content": meta["content"],
-        "raw_json": raw_json,
+        "content": combined_content,
+        "sheet_payload": structured_payload,
     }
     embedding = generate_embedding(doc.get("content", ""), client)
     if embedding:
