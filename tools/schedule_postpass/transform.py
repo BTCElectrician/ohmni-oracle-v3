@@ -41,6 +41,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _KEY_SANITIZE_REGEX = re.compile(r"[^A-Za-z0-9_\-=]")
+_BOGUS_ROOM_PATTERNS = [
+    re.compile(r"^\s*ps[\s_\-]*\d+\s*$", re.IGNORECASE),
+    re.compile(r"\barea\s+not\s+in\s+scope\b", re.IGNORECASE),
+    re.compile(r"^\s*ada\s*$", re.IGNORECASE),
+]
 
 
 def sanitize_key_component(value: Any, fallback: str = "none") -> str:
@@ -58,6 +63,21 @@ def make_document_id(*parts: Any) -> str:
     if not components:
         return "doc"
     return "-".join(components)
+
+
+def _is_bogus_room(room: Dict[str, Any]) -> bool:
+    name_candidates = [
+        str(room.get("room_name") or "").strip(),
+        str(room.get("room_number") or "").strip(),
+        str(room.get("room_id") or "").strip(),
+    ]
+    for name in name_candidates:
+        if not name:
+            continue
+        for pat in _BOGUS_ROOM_PATTERNS:
+            if pat.search(name):
+                return True
+    return False
 
 def generate_embedding(text: str, client: Optional[OpenAI]) -> Optional[List[float]]:
     """Generate a vector embedding for hybrid search (best-effort)."""
@@ -291,6 +311,9 @@ def iter_template_docs(
                 room_id = room.get("room_id") or room.get("room_number") or path.stem
                 if not agg_sheet_number or not room_id:
                     print(f"Skipping room in {path}: Missing sheet_number or room_id.", file=sys.stderr)
+                    continue
+                if _is_bogus_room(room):
+                    print(f"Skipping bogus room in {path}: {room.get('room_name') or room.get('room_number') or room_id}", file=sys.stderr)
                     continue
 
                 tenant_id = room.get("tenant_id") or raw.get("tenant_id") or base_meta.get("tenant_id") or "ohmni"
