@@ -85,9 +85,13 @@ async def step_generate_room_templates(
                 artifact_paths,
                 file_name,
                 pipeline_id,
-                storage_discipline,
-                drawing_slug,
-                artifact_type="room-data",
+                storage_discipline="room-data",
+                drawing_slug=drawing_slug,
+                artifact_type="",
+                content_type="application/json",
+                extra_metadata={
+                    "original_discipline": storage_discipline,
+                },
             )
             
         except Exception as e:

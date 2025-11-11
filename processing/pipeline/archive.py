@@ -5,7 +5,7 @@ Handles archiving of original documents, structured output, and artifacts.
 """
 import os
 import time
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Dict, Any
 
 from services.storage_service import StoredFileInfo, OriginalDocumentArchiver
 from utils.exceptions import FileSystemError
@@ -196,6 +196,7 @@ async def archive_additional_artifacts(
     *,
     artifact_type: str,
     content_type: str = "application/json",
+    extra_metadata: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Upload additional artifacts related to the drawing (e.g., room templates).
     
@@ -225,6 +226,8 @@ async def archive_additional_artifacts(
             "artifact_type": artifact_type,
             "original_pdf": file_name,
         }
+        if extra_metadata:
+            metadata.update(extra_metadata)
 
         storage_name = build_artifact_storage_name(
             storage_discipline, drawing_slug, os.path.basename(artifact_path), artifact_type
