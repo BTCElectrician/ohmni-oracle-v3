@@ -9,8 +9,20 @@ from typing import List, Dict, Any, Optional
 import pymupdf as fitz
 
 from utils.minimal_panel_clip import (
-    panel_rects,
+    segment_panels,
     get_panel_text_blocks,
+    detect_column_headers,
+    map_values_to_columns,
+    normalize_left_right,
+)
+from config.settings import (
+    PANEL_Y_TOL_MAX,
+    PANEL_Y_TOL_FRAC,
+    PANEL_PAD,
+    PANEL_HEADER_TOL,
+    PANEL_HEADER_TOL_RETRY,
+    PANEL_MIN_ROWS_FOR_PANEL,
+    PANEL_DEBUG_MODE,
 )
 
 from .base import PyMuPdfExtractor
@@ -221,45 +233,100 @@ IMPORTANT FOR JSON STRUCTURE:
         return panel_tables + other_tables
 
     async def _extract_panels_separately(self, file_path: str) -> str:
-        """Extract panels separately using clipping to prevent cross-panel bleeding."""
+        """
+        Extract panels separately using column-mapped extraction to prevent cross-panel bleeding.
+        
+        Uses segment_panels for accurate segmentation, splits each panel into left/right halves,
+        maps values to columns, pairs odd/even circuits, and emits structured text.
+        """
         try:
             doc = fitz.open(file_path)
             all_panels_text = []
+            sheet_summaries = []
+
+            # Compute adaptive y_tol
+            page_rect = doc[0].rect if len(doc) > 0 else None
+            y_tol = (
+                min(PANEL_Y_TOL_MAX, page_rect.height * PANEL_Y_TOL_FRAC)
+                if page_rect
+                else PANEL_Y_TOL_MAX
+            )
 
             # Process each page
             for page_num, page in enumerate(doc):
-                # Get panel rectangles for this page
-                panels = panel_rects(page)
+                # Segment panels with adaptive y_tol
+                panels = segment_panels(page, y_tol=y_tol, pad=PANEL_PAD, logger=self.logger)
+
+                # Log panel rects
+                panel_info = [
+                    f"({name},({rect.x0:.1f},{rect.y0:.1f},{rect.x1:.1f},{rect.y1:.1f}))"
+                    for name, rect in panels
+                ]
+                self.logger.info(
+                    f"page={page_num + 1} panels=[{','.join(panel_info)}]"
+                )
 
                 if panels:
-                    self.logger.info(f"Found {len(panels)} panels on page {page_num + 1}")
+                    self.logger.info(
+                        f"Found {len(panels)} panels on page {page_num + 1}"
+                    )
 
                     # Extract each panel separately
                     for panel_name, rect in panels:
-                        # Extract text from this panel's rectangle
-                        panel_text = get_panel_text_blocks(page, rect)
+                        # Filter out sheet summaries
+                        SUMMARY_NAMES = {"TOTALS", "SUMMARY", "LOAD", "LOAD SUMMARY"}
+                        if panel_name in SUMMARY_NAMES:
+                            self.logger.debug(f"summary_block detected: {panel_name}")
+                            block_text = get_panel_text_blocks(page, rect)
+                            sheet_summaries.append(
+                                f"SHEET_SUMMARY: {panel_name}\n{block_text}"
+                            )
+                            continue
 
-                        # Add panel header and markers
-                        panel_section = f"\n===PANEL {panel_name} BEGINS===\n"
-                        panel_section += f"Panel: {panel_name}\n"
-                        panel_section += panel_text
-                        panel_section += f"\n===PANEL {panel_name} ENDS===\n"
+                        # Extract panel with column mapping
+                        panel_data = self._extract_panel_struct(
+                            page, panel_name, rect, header_tol=PANEL_HEADER_TOL
+                        )
 
+                        if panel_data.get("summary"):
+                            # This is a sheet summary, not a panel
+                            sheet_summaries.append(
+                                f"SHEET_SUMMARY: {panel_name}\n{panel_data.get('summary', {}).get('raw_text', '')}"
+                            )
+                            continue
+
+                        # Build structured text output
+                        panel_section = self._build_panel_text_section(
+                            panel_name, panel_data
+                        )
                         all_panels_text.append(panel_section)
 
-                        self.logger.debug(
-                            f"Extracted panel {panel_name} with {len(panel_text)} chars"
+                        # Log extraction metrics
+                        circuits = panel_data.get("circuits", [])
+                        paired_count = sum(
+                            1 for c in circuits if c.get("paired_circuit")
                         )
+                        self.logger.info(
+                            f"panel={panel_name} circuits_emitted={len(circuits)} paired_even={paired_count}"
+                        )
+
                 else:
                     # No panels detected on this page, extract normally
                     page_text = page.get_text("text", sort=True)
                     if page_text.strip():
                         all_panels_text.append(page_text)
+                        self.logger.info(
+                            f"page={page_num + 1} extraction_mode=page-fallback"
+                        )
 
             doc.close()
 
             # Combine all panel texts
             combined_text = "\n".join(all_panels_text)
+
+            # Append sheet summaries if any
+            if sheet_summaries:
+                combined_text += "\n\n" + "\n\n".join(sheet_summaries)
 
             # Add structural hints for AI processing
             combined_text = self._add_panel_structure_hints(combined_text)
@@ -270,4 +337,310 @@ IMPORTANT FOR JSON STRUCTURE:
             self.logger.error(f"Error in per-panel extraction: {str(e)}")
             # Fall back to regular extraction
             raise
+
+    def _extract_panel_struct(
+        self, page: fitz.Page, name: str, rect: fitz.Rect, *, header_tol: float
+    ) -> Dict[str, Any]:
+        """
+        Extract structured panel data with column mapping and circuit pairing.
+        
+        Args:
+            page: PyMuPDF page object
+            name: Panel name
+            rect: Panel bounding rectangle
+            header_tol: Header detection tolerance
+        
+        Returns:
+            Dictionary with panel_name, metadata, circuits, or summary
+        """
+        # Check if this is a sheet summary
+        SUMMARY_NAMES = {"TOTALS", "SUMMARY", "LOAD", "LOAD SUMMARY"}
+        if name in SUMMARY_NAMES:
+            block_text = get_panel_text_blocks(page, rect)
+            return {"summary": {"raw_text": block_text}}
+
+        # Split panel into left/right halves
+        mid_x = (rect.x0 + rect.x1) / 2.0
+        left_rect = fitz.Rect(rect.x0, rect.y0, mid_x, rect.y1)
+        right_rect = fitz.Rect(mid_x, rect.y0, rect.x1, rect.y1)
+
+        # Extract left side
+        left_headers = detect_column_headers(page, left_rect, header_band_px=150.0)
+        left_words = page.get_text("words", clip=left_rect, sort=True)
+        left_mapped = map_values_to_columns(left_words, left_headers, tolerance=header_tol)
+
+        # Extract right side
+        right_headers = detect_column_headers(page, right_rect, header_band_px=150.0)
+        right_words = page.get_text("words", clip=right_rect, sort=True)
+        right_mapped = map_values_to_columns(
+            right_words, right_headers, tolerance=header_tol
+        )
+
+        # Get block text for fallback
+        block_text = get_panel_text_blocks(page, rect)
+
+        # Log extraction metrics
+        total_words = len(left_words) + len(right_words)
+        total_mapped = len(left_mapped) + len(right_mapped)
+        header_names = list(set(list(left_headers.keys()) + list(right_headers.keys())))
+        self.logger.info(
+            f"panel={name} rect=[{rect.x0:.1f},{rect.y0:.1f},{rect.x1:.1f},{rect.y1:.1f}] "
+            f"words={total_words} headers={header_names} mapped_rows={total_mapped}"
+        )
+
+        # Build row objects from mapped data
+        left_rows = self._build_rows_from_mapped(left_mapped, side="left")
+        right_rows = self._build_rows_from_mapped(right_mapped, side="right")
+
+        # Pair left (odd) with right (even) circuits
+        circuits = self._pair_circuits(left_rows, right_rows)
+
+        # Convert to format expected by normalize_left_right
+        circuits_normalized = []
+        for circuit in circuits:
+            normalized = {
+                "circuit_number": circuit.get("circuit_number"),
+                "load_name": circuit.get("load_name"),
+                "trip": circuit.get("trip"),
+                "poles": circuit.get("poles"),
+                "phase_loads": circuit.get("phase_loads", {"A": None, "B": None, "C": None}),
+                "right_side": circuit.get("paired_circuit", {}),
+            }
+            circuits_normalized.append(normalized)
+
+        # Apply normalize_left_right
+        circuits_normalized = normalize_left_right(circuits_normalized)
+
+        # Convert back to our format
+        circuits = []
+        for c in circuits_normalized:
+            circuit = {
+                "circuit_number": c.get("circuit_number"),
+                "load_name": c.get("load_name"),
+                "trip": c.get("trip"),
+                "poles": c.get("poles"),
+                "phase_loads": c.get("phase_loads", {"A": None, "B": None, "C": None}),
+            }
+            right_side = c.get("right_side", {})
+            if right_side and right_side.get("circuit_number"):
+                circuit["paired_circuit"] = right_side
+            circuits.append(circuit)
+
+        # Retry with relaxed tolerance if needed
+        if (
+            len(circuits) < PANEL_MIN_ROWS_FOR_PANEL
+            and len(block_text) > 1000
+            and header_tol == PANEL_HEADER_TOL
+        ):
+            self.logger.warning(
+                f"fallback: header_mapping_failed for {name}, retrying with relaxed tolerance and widened rect"
+            )
+            # Widen rect by ±5pt
+            widened_rect = fitz.Rect(
+                max(0, rect.x0 - 5),
+                max(0, rect.y0 - 5),
+                rect.x1 + 5,
+                rect.y1 + 5,
+            )
+            return self._extract_panel_struct(
+                page, name, widened_rect, header_tol=PANEL_HEADER_TOL_RETRY
+            )
+
+        # Extract metadata from header band
+        metadata = self._extract_panel_metadata(page, rect, name)
+
+        return {
+            "panel_name": name,
+            "metadata": metadata,
+            "circuits": circuits,
+            "raw_text": block_text,
+        }
+
+    def _build_rows_from_mapped(
+        self, mapped_rows: Dict[int, Dict[str, str]], side: str
+    ) -> List[Dict[str, Any]]:
+        """Build row objects from mapped column data."""
+        rows = []
+        for row_idx in sorted(mapped_rows.keys()):
+            row_data = mapped_rows[row_idx]
+            row = {
+                "circuit_number": self._parse_circuit_number(row_data.get("CKT", "")),
+                "load_name": row_data.get("LOAD_NAME", "").strip() or None,
+                "trip": self._parse_trip(row_data.get("TRIP", "")),
+                "poles": self._parse_poles(row_data.get("POLES", "")),
+                "phase_loads": {
+                    "A": self._parse_phase_load(row_data.get("PHASE_A", "")),
+                    "B": self._parse_phase_load(row_data.get("PHASE_B", "")),
+                    "C": self._parse_phase_load(row_data.get("PHASE_C", "")),
+                },
+            }
+            rows.append(row)
+        return rows
+
+    def _parse_circuit_number(self, value: str) -> Optional[int]:
+        """Parse circuit number from string."""
+        if not value:
+            return None
+        # Extract first number found
+        match = re.search(r"\d+", str(value))
+        return int(match.group()) if match else None
+
+    def _parse_trip(self, value: str) -> Optional[str]:
+        """Parse trip/breaker rating."""
+        if not value:
+            return None
+        # Extract value like "20 A" or "20A" or just "20"
+        value = str(value).strip()
+        match = re.search(r"(\d+(?:\.\d+)?)\s*(?:A|AMP|AMPS)?", value, re.IGNORECASE)
+        if match:
+            return f"{match.group(1)} A"
+        return value if value else None
+
+    def _parse_poles(self, value: str) -> Optional[int]:
+        """Parse number of poles."""
+        if not value:
+            return None
+        match = re.search(r"\d+", str(value))
+        return int(match.group()) if match else None
+
+    def _parse_phase_load(self, value: str) -> Optional[str]:
+        """Parse phase load value."""
+        if not value:
+            return None
+        value = str(value).strip()
+        # Extract numeric value with units if present
+        match = re.search(r"(\d+(?:\.\d+)?)\s*(?:VA|W)?", value, re.IGNORECASE)
+        return match.group(1) if match else value if value else None
+
+    def _pair_circuits(
+        self, left_rows: List[Dict[str, Any]], right_rows: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Pair left (odd) circuits with right (even) circuits."""
+        circuits = []
+        max_len = max(len(left_rows), len(right_rows))
+
+        for i in range(max_len):
+            left = left_rows[i] if i < len(left_rows) else {}
+            right = right_rows[i] if i < len(right_rows) else {}
+
+            # Build circuit object with left side and optional paired right side
+            circuit = {
+                "circuit_number": left.get("circuit_number"),
+                "load_name": left.get("load_name"),
+                "trip": left.get("trip"),
+                "poles": left.get("poles"),
+                "phase_loads": left.get("phase_loads", {"A": None, "B": None, "C": None}),
+            }
+
+            # Add paired circuit if right side has a circuit number
+            if right.get("circuit_number"):
+                circuit["paired_circuit"] = {
+                    "circuit_number": right.get("circuit_number"),
+                    "load_name": right.get("load_name"),
+                    "trip": right.get("trip"),
+                    "poles": right.get("poles"),
+                    "phase_loads": right.get(
+                        "phase_loads", {"A": None, "B": None, "C": None}
+                    ),
+                }
+
+            circuits.append(circuit)
+
+        return circuits
+
+    def _extract_panel_metadata(
+        self, page: fitz.Page, rect: fitz.Rect, panel_name: str
+    ) -> Dict[str, Any]:
+        """Extract panel metadata from header band (<250pt from anchor)."""
+        header_band = fitz.Rect(rect.x0, rect.y0, rect.x1, min(rect.y1, rect.y0 + 250))
+        words = page.get_text("words", clip=header_band, sort=True)
+        text = " ".join([w[4] for w in words]).upper()
+
+        metadata = {}
+        # Extract common metadata fields
+        wires_match = re.search(r"(\d+)\s*WIRE", text)
+        if wires_match:
+            metadata["wires"] = int(wires_match.group(1))
+
+        phases_match = re.search(r"(\d+)\s*PHASE", text)
+        if phases_match:
+            metadata["phases"] = int(phases_match.group(1))
+
+        volts_match = re.search(r"(\d+)\s*V(?:OLT)?", text)
+        if volts_match:
+            metadata["volts"] = int(volts_match.group(1))
+
+        rating_match = re.search(r"RATING[:\s]+(\d+)\s*(?:A|AMP)", text)
+        if rating_match:
+            metadata["rating"] = f"{rating_match.group(1)} A"
+
+        type_match = re.search(r"TYPE[:\s]+([A-Z0-9\-]+)", text)
+        if type_match:
+            metadata["type"] = type_match.group(1)
+
+        aic_match = re.search(r"AIC[:\s]+(\d+)", text)
+        if aic_match:
+            metadata["aic"] = int(aic_match.group(1))
+
+        supply_match = re.search(r"SUPPLY\s+FROM[:\s]+([A-Z0-9\-]+)", text)
+        if supply_match:
+            metadata["supply_from"] = supply_match.group(1)
+
+        return metadata
+
+    def _build_panel_text_section(
+        self, panel_name: str, panel_data: Dict[str, Any]
+    ) -> str:
+        """Build structured text section for a panel."""
+        circuits = panel_data.get("circuits", [])
+        metadata = panel_data.get("metadata", {})
+        raw_text = panel_data.get("raw_text", "")
+
+        section = f"\n===PANEL {panel_name} BEGINS===\n"
+        section += f"Panel: {panel_name}\n"
+
+        # Add metadata if present
+        if metadata:
+            section += "METADATA:\n"
+            for key, value in metadata.items():
+                if value:
+                    section += f"  {key}: {value}\n"
+
+        # Add structured circuits
+        section += "\nCIRCUITS:\n"
+        for circuit in circuits:
+            ckt_num = circuit.get("circuit_number")
+            if ckt_num is None:
+                continue
+
+            section += f"  Circuit {ckt_num}:\n"
+            if circuit.get("load_name"):
+                section += f"    Load Name: {circuit['load_name']}\n"
+            if circuit.get("trip"):
+                section += f"    Trip: {circuit['trip']}\n"
+            if circuit.get("poles"):
+                section += f"    Poles: {circuit['poles']}\n"
+            if circuit.get("phase_loads"):
+                phases = circuit["phase_loads"]
+                phase_strs = []
+                for phase in ["A", "B", "C"]:
+                    if phases.get(phase):
+                        phase_strs.append(f"{phase}={phases[phase]}")
+                if phase_strs:
+                    section += f"    Phase Loads: {', '.join(phase_strs)}\n"
+
+            # Add paired circuit if present
+            paired = circuit.get("paired_circuit")
+            if paired and paired.get("circuit_number"):
+                section += f"    Paired Circuit: {paired['circuit_number']}\n"
+                if paired.get("load_name"):
+                    section += f"      Load Name: {paired['load_name']}\n"
+                if paired.get("trip"):
+                    section += f"      Trip: {paired['trip']}\n"
+
+        # Append raw block text for QA
+        section += f"\nRAW_TEXT:\n{raw_text}\n"
+        section += f"===PANEL {panel_name} ENDS===\n"
+
+        return section
 

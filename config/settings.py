@@ -119,6 +119,15 @@ STRUCTURED_BLOB_CREDENTIAL = os.getenv("STRUCTURED_BLOB_CREDENTIAL", AZURE_BLOB_
 STRUCTURED_BLOB_SAS_TOKEN = os.getenv("STRUCTURED_BLOB_SAS_TOKEN", AZURE_BLOB_SAS_TOKEN)
 STRUCTURED_BLOB_CONTAINER = os.getenv("STRUCTURED_BLOB_CONTAINER", AZURE_BLOB_CONTAINER)
 
+# Panel extraction configuration
+PANEL_Y_TOL_MAX = float(os.getenv("PANEL_Y_TOL_MAX", "120.0"))
+PANEL_Y_TOL_FRAC = float(os.getenv("PANEL_Y_TOL_FRAC", "0.08"))
+PANEL_PAD = float(os.getenv("PANEL_PAD", "10.0"))
+PANEL_HEADER_TOL = float(os.getenv("PANEL_HEADER_TOL", "30.0"))
+PANEL_HEADER_TOL_RETRY = float(os.getenv("PANEL_HEADER_TOL_RETRY", "45.0"))
+PANEL_MIN_ROWS_FOR_PANEL = int(os.getenv("PANEL_MIN_ROWS_FOR_PANEL", "4"))
+PANEL_DEBUG_MODE = os.getenv("PANEL_DEBUG_MODE", "false").lower() == "true"
+
 
 def get_all_settings() -> Dict[str, Any]:
     return {
