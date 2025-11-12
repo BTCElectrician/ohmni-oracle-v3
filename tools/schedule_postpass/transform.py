@@ -266,11 +266,12 @@ def emit_facts(raw_json: Dict[str, Any], meta: Dict[str, Any], client: Optional[
 
 
 def _guess_template_type(path: pathlib.Path) -> str:
+    full_lower = str(path).lower()
     lowered = [part.lower() for part in path.parts]
     name = path.name.lower()
-    if any("architect" in part for part in lowered) or name.startswith("a_"):
+    if "_a_rooms" in full_lower or "-a_rooms" in full_lower or any("architect" in part for part in lowered) or name.startswith("a_"):
         return "architectural"
-    if any("elect" in part for part in lowered) or name.startswith("e_"):
+    if "_e_rooms" in full_lower or "-e_rooms" in full_lower or any("elect" in part for part in lowered) or name.startswith("e_"):
         return "electrical"
     return "electrical"
 
