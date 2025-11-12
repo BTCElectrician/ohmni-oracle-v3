@@ -38,6 +38,9 @@ class PipelineContext:
         self.file_name = os.path.basename(pdf_path)
         self.pipeline_id = str(uuid.uuid4())
         
+        # Resolve tenant_id from environment variable, default to "ohmni"
+        self.tenant_id = os.getenv("TENANT_ID", "ohmni")
+        
         # Set up output paths
         self.output_base_folder = output_folder
         self.output_drawing_type_folder = drawing_type if drawing_type else "General"
@@ -164,7 +167,7 @@ async def process_pipeline(
                 state, services, context.pdf_path, context.file_name,
                 context.pipeline_id, context.structured_output_path,
                 context.error_output_path, context.storage_discipline,
-                context.drawing_slug
+                context.drawing_slug, context.tenant_id
             )
             if not success:
                 pbar.update(20)  # remaining progress
@@ -177,7 +180,7 @@ async def process_pipeline(
                 state, services, context.pdf_path, context.file_name,
                 context.templates_central_folder, context.pipeline_id,
                 context.storage_discipline, context.drawing_slug,
-                templates_created
+                templates_created, context.tenant_id
             )
             pbar.update(10)  # Room templates
 
@@ -188,7 +191,7 @@ async def process_pipeline(
                 context.drawing_folder, context.templates_central_folder,
                 context.meta_file_path, context.drawing_slug,
                 context.output_drawing_type_folder, context.version_folder,
-                context.output_base_folder
+                context.output_base_folder, context.tenant_id
             )
 
             # Return final result

@@ -9,6 +9,9 @@ logs/
 output/
 workplan.md
 UPGRADE-DOCU-INT.md
+processed/
+tmp/
+.project_id
 
 # Test data and output
 test_data/
@@ -16,6 +19,7 @@ test_output/
 test_output_arch/
 test_output_fix/
 metrics_*.json
+json-pdf/*_structured.json
 
 # AI cache
 .ai_cache/

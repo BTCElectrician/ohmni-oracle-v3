@@ -18,6 +18,7 @@ async def step_generate_room_templates(
     storage_discipline: str,
     drawing_slug: str,
     templates_created: dict[str, bool],
+    tenant_id: str,
 ) -> ProcessingState:
     """
     Generate room templates for architectural drawings.
@@ -67,7 +68,8 @@ async def step_generate_room_templates(
             result = process_architectural_drawing(
                 state["parsed_json_data"], 
                 pdf_path, 
-                templates_folder
+                templates_folder,
+                tenant_id
             )
             
             state["templates_created"]["floor_plan"] = True

@@ -13,7 +13,7 @@ import requests
 AZURE_SEARCH_ENDPOINT = os.environ["AZURE_SEARCH_ENDPOINT"]
 AZURE_SEARCH_API_KEY = os.environ["AZURE_SEARCH_API_KEY"]
 INDEX_NAME = os.environ.get("INDEX_NAME", "drawings_unified")
-API_VERSION = "2024-07-01"
+API_VERSION = os.environ.get("AZURE_SEARCH_API_VERSION", "2024-07-01")
 
 
 def _index_url(path: str) -> str:
@@ -32,7 +32,7 @@ def create_index(schema_path: pathlib.Path) -> None:
 
     print(f"Attempting to create/update index '{INDEX_NAME}'...")
     response = requests.put(url, headers=headers, data=json.dumps(schema))
-    if response.status_code not in (200, 201):
+    if response.status_code not in (200, 201, 204):
         raise RuntimeError(f"Index create failed: {response.status_code} {response.text}")
     print("Index created/replaced.")
 
@@ -71,7 +71,7 @@ def create_synonym_map(synonyms_path: pathlib.Path) -> None:
     if response.status_code == 409:
         headers["If-Match"] = "*"
         response = requests.put(url, headers=headers, data=json.dumps(payload))
-    if response.status_code not in (200, 201):
+    if response.status_code not in (200, 201, 204):
         raise RuntimeError(f"Synonym map create failed: {response.status_code} {response.text}")
     print("Synonym map ready.")
 

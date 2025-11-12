@@ -73,6 +73,7 @@ async def step_save_output(
     error_output_path: str,
     storage_discipline: str,
     drawing_slug: str,
+    tenant_id: str,
 ) -> Tuple[ProcessingState, bool]:
     """
     Save the processed data to the output file.
@@ -115,8 +116,13 @@ async def step_save_output(
         attach_source_reference(state, archived_info, file_name)
 
     try:
+        # Add tenant_id to parsed JSON before saving
+        parsed_json = state["parsed_json_data"]
+        if isinstance(parsed_json, dict):
+            parsed_json["tenant_id"] = tenant_id
+        
         saved = await services["storage"].save_json(
-            state["parsed_json_data"],
+            parsed_json,
             structured_output_path,
         )
         if not saved:
@@ -173,6 +179,7 @@ async def step_save_metadata(
     output_drawing_type_folder: str,
     version_folder: str,
     output_base_folder: str,
+    tenant_id: str,
 ) -> ProcessingState:
     """Persist a lightweight metadata manifest for the processed drawing.
     
@@ -238,6 +245,7 @@ async def step_save_metadata(
         )
 
     metadata_payload = {
+        "tenant_id": tenant_id,
         "drawing": {
             "slug": drawing_slug,
             "discipline": output_drawing_type_folder,

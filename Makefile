@@ -2,7 +2,26 @@
 # Usage: make <target>
 # Example: make run INPUT=./test_data
 
-.PHONY: help install setup run run-single test clean lint format check-env venv
+.PHONY: help install setup run run-single test clean lint format check-env venv \
+	index-pack index-rebuild index-templates index-check index-set-project
+
+ifneq (,$(wildcard .env))
+    include .env
+    AZURE_SEARCH_ENDPOINT := $(subst ",,$(strip $(AZURE_SEARCH_ENDPOINT)))
+    AZURE_SEARCH_API_KEY := $(subst ",,$(strip $(AZURE_SEARCH_API_KEY)))
+    INDEX_NAME := $(subst ",,$(strip $(INDEX_NAME)))
+    AZURE_SEARCH_API_VERSION := $(subst ",,$(strip $(AZURE_SEARCH_API_VERSION)))
+    export AZURE_SEARCH_ENDPOINT AZURE_SEARCH_API_KEY INDEX_NAME AZURE_SEARCH_API_VERSION
+endif
+
+PROJECT_FILE ?= .project_id
+PROJECT ?= $(shell cat $(PROJECT_FILE) 2>/dev/null || echo ohmni-elecshuffletest)
+SOURCE ?= $(CURDIR)/processed
+PROCESSED_DIR := $(SOURCE)
+TEMPLATES_ROOT ?= $(PROCESSED_DIR)/room-data
+INDEX_OUT_DIR ?= $(CURDIR)/tmp/index_out
+INDEX_NAME ?= drawings_unified
+export INDEX_NAME
 
 # Default target
 help:
@@ -18,6 +37,14 @@ help:
 	@echo "  make run INPUT=<folder> [OUTPUT=<folder>]  - Run the main script"
 	@echo "  make run-single FILE=<file_path> [OUTPUT=<folder>]  - Run on a single PDF file"
 	@echo "  make run-example    - Run with example data (if available)"
+	@echo ""
+	@echo "Index Management:"
+	@echo "  make index-pack         - Regenerate sheets/facts/templates JSONL payloads"
+	@echo "  make index-rebuild      - Recreate drawings_unified and upload all docs"
+	@echo "  make index-templates    - Incremental template-only upsert"
+	@echo "  make index-check        - Run query_playbook sanity checks"
+	@echo "  make index-set-project PROJECT=<id> - Persist default project id for indexing"
+	@echo "    (Override source path with SOURCE=/absolute/path/to/processed)"
 	@echo ""
 	@echo "Development & Testing:"
 	@echo "  make test           - Run all tests"
@@ -137,6 +164,49 @@ run-example: check-env
 		echo "❌ No test data found in tests/test_data/"; \
 		echo "Create test data or specify INPUT folder"; \
 	fi
+
+index-pack: check-env
+	@mkdir -p $(INDEX_OUT_DIR)
+	@echo "📦 Regenerating index payloads for project: $(PROJECT)"
+	@echo "   Source: $(PROCESSED_DIR)"
+	python3 tools/schedule_postpass/transform.py \
+	  $(PROCESSED_DIR) \
+	  $(INDEX_OUT_DIR) \
+	  $(PROJECT) \
+	  --templates-root $(TEMPLATES_ROOT)
+	@echo "✅ Payloads written to $(INDEX_OUT_DIR)"
+
+index-rebuild: index-pack
+	@echo "🚀 Rebuilding Azure Search index '$(INDEX_NAME)'"
+	python3 tools/schedule_postpass/upsert_index.py \
+	  --schema tools/schedule_postpass/unified_index.schema.json \
+	  --synonyms tools/schedule_postpass/synonyms.seed.json \
+	  --sheets $(INDEX_OUT_DIR)/sheets.jsonl \
+	  --facts  $(INDEX_OUT_DIR)/facts.jsonl \
+	  --templates $(INDEX_OUT_DIR)/templates.jsonl \
+	  --mode full
+	@echo "✅ Index rebuild complete"
+
+index-templates: index-pack
+	@echo "🚀 Incrementally updating template docs in '$(INDEX_NAME)'"
+	python3 tools/schedule_postpass/upsert_index.py \
+	  --schema tools/schedule_postpass/unified_index.schema.json \
+	  --templates $(INDEX_OUT_DIR)/templates.jsonl \
+	  --mode incremental
+	@echo "✅ Template upsert complete"
+
+index-check: check-env
+	@echo "🔍 Running query_playbook sanity checks..."
+	python3 tools/schedule_postpass/query_playbook.py
+
+index-set-project:
+	@if [ -z "$(PROJECT)" ]; then \
+		echo "❌ Error: PROJECT parameter required"; \
+		echo "Usage: make index-set-project PROJECT=<id>"; \
+		exit 1; \
+	fi
+	@echo $(PROJECT) > $(PROJECT_FILE)
+	@echo "✅ Default indexing project set to '$(PROJECT)'"
 
 # Run tests
 test: check-env

@@ -112,8 +112,9 @@ process_folder() {
         return 1
     fi
     
-    # Set output folder (same as input with /output suffix)
-    local output_path="$full_path/output"
+    # Set output folder to <job>/processed
+    local output_path="$full_path/processed"
+    mkdir -p "$output_path"
     
     print_info "Processing folder: $folder_name"
     print_info "Input path: $full_path"
@@ -170,8 +171,8 @@ process_file() {
     # Copy the file to temp directory
     cp "$full_path" "$temp_file_path"
     
-    # Set output folder (same as original folder with /output suffix)
-    local output_path="$desktop_path/$folder_name/output"
+    local output_path="$desktop_path/$folder_name/processed"
+    mkdir -p "$output_path"
     
     print_info "Processing single file: $file_name"
     print_info "From folder: $folder_name/$subfolder"

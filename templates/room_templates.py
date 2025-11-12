@@ -232,9 +232,15 @@ def generate_rooms_data(parsed_data, room_type):
     return rooms_data_output
 
 
-def process_architectural_drawing(parsed_data, file_path, output_folder):
+def process_architectural_drawing(parsed_data, file_path, output_folder, tenant_id=None):
     """
     Process architectural drawing data and generate room template files.
+    
+    Args:
+        parsed_data: Parsed JSON data from AI processing
+        file_path: Path to the original PDF file
+        output_folder: Folder where template files should be saved
+        tenant_id: Tenant identifier (defaults to None if not provided)
     """
     os.makedirs(output_folder, exist_ok=True)
     # Get drawing metadata from various possible locations
@@ -281,6 +287,18 @@ def process_architectural_drawing(parsed_data, file_path, output_folder):
 
     e_rooms_data["source_document"] = source_document_info
     a_rooms_data["source_document"] = source_document_info
+
+    # Add tenant_id to template data
+    if tenant_id:
+        e_rooms_data["tenant_id"] = tenant_id
+        a_rooms_data["tenant_id"] = tenant_id
+        # Also add to each room in the templates
+        for room in e_rooms_data.get("rooms", []):
+            if isinstance(room, dict):
+                room["tenant_id"] = tenant_id
+        for room in a_rooms_data.get("rooms", []):
+            if isinstance(room, dict):
+                room["tenant_id"] = tenant_id
 
     # Ensure metadata is propagated to template files
     if drawing_metadata:

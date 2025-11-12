@@ -3,6 +3,7 @@ import sys
 import asyncio
 import logging
 import time
+from pathlib import Path
 
 from openai import AsyncOpenAI
 from config.settings import OPENAI_API_KEY, get_all_settings
@@ -21,8 +22,10 @@ async def main_async():
         return 1
 
     job_folder = sys.argv[1]
+    job_path = Path(job_folder).resolve()
+    default_output = job_path / "processed"
     output_folder = (
-        sys.argv[2] if len(sys.argv) > 2 else os.path.join(job_folder, "output")
+        sys.argv[2] if len(sys.argv) > 2 else str(default_output)
     )
 
     if not os.path.exists(job_folder):
@@ -31,6 +34,10 @@ async def main_async():
 
     # Generate run_id once for this entire run
     run_id = time.strftime("%Y%m%d_%H%M%S")
+
+    # Ensure shared processed directory exists when using default output
+    if len(sys.argv) <= 2:
+        default_output.mkdir(parents=True, exist_ok=True)
 
     # 1) Set up logging
     setup_logging(output_folder, run_id)
