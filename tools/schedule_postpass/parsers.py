@@ -53,6 +53,12 @@ def _parse_float(value: Any) -> Optional[float]:
         return None
 
 
+def _to_string(value: Any) -> Optional[str]:
+    if value in (None, ""):
+        return None
+    return str(value).strip()
+
+
 def extract_key(stype: str, row: Dict[str, Any]) -> Dict[str, Any]:
     if stype == "panel":
         panel = _get(row, "panel", "panel_name", "board")
@@ -94,13 +100,13 @@ def extract_key(stype: str, row: Dict[str, Any]) -> Dict[str, Any]:
 def extract_attributes(stype: str, row: Dict[str, Any]) -> Dict[str, Any]:
     attrs: Dict[str, Any] = {}
 
-    attrs["description"] = _get(row, "description", "desc", "notes", "load")
+    attrs["description"] = _to_string(_get(row, "description", "desc", "notes", "load"))
 
     attrs["voltage"] = _parse_float(_get(row, "voltage", "volts", "v"))
-    attrs["phase"] = _get(row, "phase", "ph")
+    attrs["phase"] = _to_string(_get(row, "phase", "ph"))
     attrs["rating_a"] = _parse_float(_get(row, "amps", "amp", "a", "breaker", "breaker_a"))
-    attrs["wire"] = _get(row, "wire", "conductor")
-    attrs["conduit"] = _get(row, "conduit", "raceway")
+    attrs["wire"] = _to_string(_get(row, "wire", "conductor"))
+    attrs["conduit"] = _to_string(_get(row, "conduit", "raceway"))
     attrs["hp"] = _parse_float(_get(row, "hp"))
     attrs["kw"] = _parse_float(_get(row, "kw"))
     attrs["kva"] = _parse_float(_get(row, "kva"))
@@ -108,35 +114,35 @@ def extract_attributes(stype: str, row: Dict[str, Any]) -> Dict[str, Any]:
     attrs["mop"] = _parse_float(_get(row, "mop"))
     attrs["fla"] = _parse_float(_get(row, "fla"))
     attrs["busbar_a"] = _parse_float(_get(row, "busbar_a"))
-    attrs["disconnect"] = _get(row, "disconnect", "disc")
-    attrs["panel"] = _get(row, "panel", "panel_name")
-    attrs["circuit"] = _get(row, "circuit", "ckt", "cct")
+    attrs["disconnect"] = _to_string(_get(row, "disconnect", "disc"))
+    attrs["panel"] = _to_string(_get(row, "panel", "panel_name"))
+    attrs["circuit"] = _to_string(_get(row, "circuit", "ckt", "cct"))
 
     attrs["btu"] = _parse_float(_get(row, "btu"))
     attrs["gpm"] = _parse_float(_get(row, "gpm"))
     attrs["head"] = _parse_float(_get(row, "head"))
 
-    attrs["fixture_type"] = _get(row, "fixture_type", "type", "mark")
+    attrs["fixture_type"] = _to_string(_get(row, "fixture_type", "type", "mark"))
     attrs["lumens"] = _parse_float(_get(row, "lumens", "lm"))
-    attrs["lamp_type"] = _get(row, "lamp_type", "lamp")
-    attrs["cct"] = _get(row, "cct")
-    attrs["cri"] = _get(row, "cri")
-    attrs["mounting"] = _get(row, "mounting", "mount")
-    attrs["dimming"] = _get(row, "dimming")
+    attrs["lamp_type"] = _to_string(_get(row, "lamp_type", "lamp"))
+    attrs["cct"] = _to_string(_get(row, "cct"))
+    attrs["cri"] = _to_string(_get(row, "cri"))
+    attrs["mounting"] = _to_string(_get(row, "mounting", "mount"))
+    attrs["dimming"] = _to_string(_get(row, "dimming"))
 
     attrs["stc"] = _parse_float(_get(row, "stc"))
-    attrs["fire_rating"] = _get(row, "fire_rating", "fr", "rating")
-    attrs["stud_gauge"] = _get(row, "stud_gauge", "stud")
-    attrs["layers"] = _get(row, "layers")
+    attrs["fire_rating"] = _to_string(_get(row, "fire_rating", "fr", "rating"))
+    attrs["stud_gauge"] = _to_string(_get(row, "stud_gauge", "stud"))
+    attrs["layers"] = _to_string(_get(row, "layers"))
     attrs["ceiling_height_in"] = _parse_float(_get(row, "ceiling_height_in", "height", "ht"))
-    attrs["acoustic"] = _get(row, "acoustic", "nrc")
-    attrs["grid"] = _get(row, "grid")
-    attrs["finish_floor"] = _get(row, "finish_floor", "floor_finish")
-    attrs["finish_wall"] = _get(row, "finish_wall", "wall_finish")
-    attrs["finish_ceiling"] = _get(row, "finish_ceiling", "ceiling_finish")
-    attrs["hardware_set"] = _get(row, "hardware_set", "hw_set")
-    attrs["size"] = _get(row, "size")
-    attrs["material_frame"] = _get(row, "material_frame", "material", "frame")
+    attrs["acoustic"] = _to_string(_get(row, "acoustic", "nrc"))
+    attrs["grid"] = _to_string(_get(row, "grid"))
+    attrs["finish_floor"] = _to_string(_get(row, "finish_floor", "floor_finish"))
+    attrs["finish_wall"] = _to_string(_get(row, "finish_wall", "wall_finish"))
+    attrs["finish_ceiling"] = _to_string(_get(row, "finish_ceiling", "ceiling_finish"))
+    attrs["hardware_set"] = _to_string(_get(row, "hardware_set", "hw_set"))
+    attrs["size"] = _to_string(_get(row, "size"))
+    attrs["material_frame"] = _to_string(_get(row, "material_frame", "material", "frame"))
 
     labels: List[str] = []
     description = (attrs.get("description") or "").lower()
@@ -148,10 +154,8 @@ def extract_attributes(stype: str, row: Dict[str, Any]) -> Dict[str, Any]:
         labels.append("WP")
     if "spare" in description:
         labels.append("Spare")
-        attrs["is_spare"] = True
     if "space" in description:
         labels.append("Space")
-        attrs["is_space"] = True
 
     if labels:
         attrs["_labels"] = list(set(labels))

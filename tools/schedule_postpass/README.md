@@ -132,3 +132,92 @@ Expected checks:
 4. **Lighting** fixture schedule
 5. Architectural: **wall/partition**, **door**, **ceiling**, **finish**
 6. **Templates** (must be last so the latest foreman edit is indexed)
+
+## 6) Fact coverage checklist
+- Extractor output (`*_structured.json`) is the canonical source-of-truth. It lives in blob storage unchanged.
+- `transform.py` derives `sheets.jsonl`, `facts.jsonl`, `templates.jsonl` from that structured payload. Azure AI Search only ingests these JSONL files (one document per row) so we keep the index fast and filterable.
+- Fallback iterators in `tools/schedule_postpass/fallbacks/` synthesize facts when a sheet JSON lacks top-level `blocks/rows`:
+  - Electrical: `ELECTRICAL.panels[].circuits`, `ELECTRICAL.PANEL_SCHEDULES`
+  - Mechanical: `MECHANICAL.equipment` (dict-of-lists or flat list)
+  - Plumbing: `PLUMBING.fixtures`, `PLUMBING.water_heaters|waterHeaters`
+  - Architectural: wall/partition, door, ceiling, finish schedule keys
+- To sanity-check coverage on a new project:
+  1. Pick a structured JSON file and locate a schedule section (e.g., `ELECTRICAL.panels[].circuits`). Count rows or just skim the entries you care about.
+  2. Open the matching `facts.jsonl` and filter by `schedule_type` + `sheet_number`. Every row from the structured JSON should have a matching fact.
+  3. Optional quick count script:
+
+    ```python
+    import json
+
+    with open("E5.00_structured.json") as f:
+        raw = json.load(f)
+    num_circuits = sum(len(panel.get("circuits", [])) for panel in raw.get("ELECTRICAL", {}).get("panels", []))
+
+    with open("facts.jsonl") as f:
+        facts = [json.loads(line) for line in f]
+    num_panel_facts = sum(1 for fact in facts if fact["schedule_type"] == "panel" and fact["sheet_number"] == "E5.00")
+
+    print(num_circuits, num_panel_facts)
+    ```
+
+- If counts diverge, copy the relevant JSON snippet and extend the appropriate fallback iterator with new key aliases. Most tweaks are <10 LOC.
+- Always keep files under ~500 lines; each discipline iterator lives in its own module for that reason.
+
+## 7) Extending fallbacks on new drawing sets
+
+When a fresh project introduces a schedule shape we have not seen, follow this loop:
+
+1. **Extract first.** Run the main pipeline so the `_structured.json` lands under `processed/<discipline>/<sheet>/`.
+2. **Inspect the JSON.** Focus on schedule-like sections (anything ending with `_SCHEDULE`, lists named `fixtures`, `fans`, `devices`, etc.). Note the key that should map to `tag`, `panel`, `circuit`, etc.
+3. **Update the iterator.** Edit the matching module in `tools/schedule_postpass/fallbacks/` to include the new key aliases. Keep the edit scoped (<10 LOC) and continue normalizing identifiers (e.g., copy `DESIG.` into `tag`).
+4. **Regenerate payloads.** Run `make index-pack SOURCE=/absolute/path/to/processed` so `facts.jsonl` reflects the change. The coverage report also refreshes here.
+5. **Confirm counts.** Use the quick script above or open `coverage_report.csv`—the sheet’s raw row count should equal the fact count.
+6. **Rebuild or upsert.** Once satisfied, `make index-rebuild SOURCE=... TEMPLATES_ROOT=...` (full upload) or `python tools/schedule_postpass/upsert_index.py ... --mode incremental` (partial update).
+
+Common aliases we already handle:
+
+- Electrical: `panel_id`, `ckt`, `enclosure_info.volts`, `panel_schedules`, `panel_schedules[]`
+- Mechanical: any key ending in `_SCHEDULE` whose value is a dict with `fans`/`devices`/`units` lists; `DESIG.` normalized to `tag`
+- Plumbing: `PLUMBING_FIXTURE_SCHEDULE`, `ELECTRIC_WATER_HEATER_SCHEDULE`, `MARK` → `tag`
+- Architectural: wall/partition, door, ceiling, finish schedule arrays with aliased fields (`partition_type`, `door_number`, etc.)
+
+If counts drop to zero unexpectedly, double-check the iterator for typos and verify the extractor didn’t change naming conventions.
+
+## 8) Quick command reference (developer return checklist)
+
+```bash
+# 1. Regenerate payloads from a specific processed folder
+make index-pack SOURCE=/Users/<you>/<job>/processed \
+    TEMPLATES_ROOT=/Users/<you>/<job>/processed/room-data
+
+# 2. Full index rebuild (recreates index + uploads all docs)
+make index-rebuild SOURCE=/Users/<you>/<job>/processed \
+    TEMPLATES_ROOT=/Users/<you>/<job>/processed/room-data
+
+# 3. Inspect latest facts
+head tmp/index_out/facts.jsonl
+
+# 4. Compare structured rows vs facts for a sheet
+python - <<'PY'
+import json, pathlib
+facts = [json.loads(line) for line in open('tmp/index_out/facts.jsonl')]
+sheet = 'M6.01'
+fact_rows = [f for f in facts if f['sheet_number'] == sheet]
+structured = pathlib.Path('/Users/<you>/<job>/processed').rglob(f"{sheet}*_structured.json")
+struct_path = next(structured)
+raw = json.load(open(struct_path))
+mech = raw.get('MECHANICAL', {})
+total = 0
+for key, val in mech.items():
+    if isinstance(val, dict):
+        for kid in ('fans','devices','units','equipment','items','rows'):
+            nested = val.get(kid)
+            if isinstance(nested, list):
+                total += sum(1 for item in nested if isinstance(item, dict))
+print(f"facts: {len(fact_rows)} raw_rows: {total}")
+PY
+
+# 5. If you only need semantic Q&A, skip facts and chunk the structured JSON
+```
+
+> MVP note: For a fast demo, you can directly chunk the structured JSON files (no fallback edits required) and load those chunks into your vector index. Facts remain useful when you want structured filters or faceting later.
