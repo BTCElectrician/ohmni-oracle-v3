@@ -181,7 +181,7 @@ python main.py <input_folder> [output_folder]
 
 ## How It Works
 
-1) Extraction (services/extraction_service.py)
+1) Extraction (services/extraction/ - modular package; services/extraction_service.py maintained for backward compatibility)
 - Uses PyMuPDF for text and optional table extraction per page
 - Specialized extractors:
   - ArchitecturalExtractor: highlights room info; prioritizes relevant tables
@@ -264,7 +264,8 @@ Status values are defined in processing/file_processor.py (ProcessingStatus enum
   - file_processor.py ........ Orchestrates the per-file pipeline
   - job_processor.py ......... Manages queue, workers, and progress
 - services/
-  - extraction_service.py .... PDF text/tables extraction + discipline enhancers + title block
+  - extraction/ (package) .... PDF text/tables extraction + discipline enhancers + title block (modularized)
+  - extraction_service.py .... Backward compatibility shim (deprecated, use extraction/ package)
   - ai_service.py ............ Chat Completions integration, model routing, metadata repair
   - normalizers.py ........... Field normalization for panel/mech/plumbing
   - storage_service.py ....... Async JSON/text/binary save/read with date handling
@@ -503,7 +504,8 @@ If panels aren't being detected correctly, adjust these in `utils/minimal_panel_
   - `panel_rects()`: Calculates panel boundaries
   - `normalize_left_right()`: Fixes odd/even circuit placement
 
-- **`services/extraction_service.py`**: Integration point
+- **`services/extraction/`**: Modular extraction package (preferred)
+- **`services/extraction_service.py`**: Backward compatibility shim (deprecated)
   - `ElectricalExtractor._extract_panels_separately()`: Applies clipping to panel schedules
 
 ### Common Edge Cases
