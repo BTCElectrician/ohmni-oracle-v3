@@ -103,6 +103,7 @@ Core disciplines supported:
 - Robust metadata repair from title blocks with non-destructive fallback filling
 - JSON parsing with optional repair for tricky schedules
 - Discipline-specific normalization (panel, mechanical, plumbing)
+- **Per-panel extraction for electrical panel schedules** - prevents cross-panel text bleeding in multi-panel layouts (2x2, 3x2, 5x5 grids, etc.)
 - Room template generation for Architectural floor plans (detected by filename or metadata title)
 - AI response caching for 20–30x faster repeated runs
 - Performance metrics and slowdown detection
@@ -185,6 +186,9 @@ python main.py <input_folder> [output_folder]
 - Specialized extractors:
   - ArchitecturalExtractor: highlights room info; prioritizes relevant tables
   - ElectricalExtractor: marks/prefers panel schedules; enriches panel metadata
+    - **Panel Clipping**: For panel schedules, automatically detects individual panels (via "Panel:" headers) and extracts each panel's content separately to prevent cross-panel text bleeding
+    - Supports multi-panel grids (2x2, 3x2, 5x5, etc.) using row/column midpoint calculation
+    - See "Panel Schedule Extraction" section below for details
   - MechanicalExtractor: highlights equipment schedules
   - PlumbingExtractor: highlights fixtures/equipment/piping schedules
 - Title block detection on page 1 with rotation handling, scoring, and truncation checks
@@ -276,6 +280,7 @@ Status values are defined in processing/file_processor.py (ProcessingStatus enum
   - json_utils.py ............ JSON parsing and repair helpers
   - file_utils.py ............ Folder traversal
   - logging_utils.py ......... Logging configuration
+  - minimal_panel_clip.py .... Panel detection and clipping for multi-panel schedules
   - performance_utils.py ..... Metrics aggregation and reporting
   - exceptions/ .............. Custom exception definitions
 - main.py .................... Entry point (async)
@@ -430,6 +435,86 @@ All text processing uses Chat Completions with response_format=json_object. OCR 
   - <name>_e_rooms_details.json (electrical)
 - Merges AI-parsed data onto template, with multiple fallbacks for room discovery
 
+## Panel Schedule Extraction
+
+The `ElectricalExtractor` automatically detects and separates individual panels in multi-panel schedules to prevent cross-panel text bleeding (e.g., K1 circuits appearing in L1/H1/K1S).
+
+### How It Works
+
+1. **Panel Detection** (`utils/minimal_panel_clip.py`):
+   - Scans PDF for "Panel:" headers (also supports "PANEL", "PNL:", "Board:", etc.)
+   - Extracts panel names (e.g., "K1", "H1", "L1", "K1S")
+   - Groups panels into rows based on Y-position tolerance (default: 300 points)
+
+2. **Rectangle Calculation**:
+   - Calculates bounding rectangles for each panel using row/column midpoints
+   - Works for any grid layout: 2x2, 3x2, 5x5, etc.
+   - Adds configurable padding (default: 10 points)
+
+3. **Per-Panel Extraction**:
+   - Extracts text from each panel's rectangle separately
+   - Uses block-based extraction for better structure preservation
+   - Wraps each panel with clear markers: `===PANEL {NAME} BEGINS===` / `===PANEL {NAME} ENDS===`
+
+4. **Robustness Features**:
+   - Column header detection (CKT, TRIP, POLES, A/B/C phases)
+   - Column drift protection (maps values to nearest column header)
+   - Odd/even circuit normalization (fixes left/right swaps)
+
+### Testing Different Grid Layouts
+
+Use `test_panel_grid_layouts.py` to analyze and validate panel detection:
+
+```bash
+# Analyze any panel schedule PDF
+python test_panel_grid_layouts.py path/to/panel_schedule.pdf
+
+# Test specific expected layout (e.g., 3x2 = 6 panels)
+python test_panel_grid_layouts.py path/to/panel_schedule.pdf --expect 2x3
+
+# Test with custom Y tolerance
+python test_panel_grid_layouts.py path/to/panel_schedule.pdf --tolerance 200
+```
+
+The test script will:
+- Show detected panel anchors and their positions
+- Analyze Y-spacing between rows and suggest optimal `y_tolerance`
+- Test different tolerance values to find the best grouping
+- Report detected grid layout (e.g., "2x2 grid (4 total panels)")
+
+### Tuning Parameters
+
+If panels aren't being detected correctly, adjust these in `utils/minimal_panel_clip.py`:
+
+- **`y_tolerance`** (default: 300.0): Controls how panels are grouped into rows
+  - Too small: Panels in the same row might be split into separate rows
+  - Too large: Panels from different rows might be grouped together
+  - Rule of thumb: Should be larger than Y-variance within a row, smaller than gap between rows
+
+- **`pad`** (default: 10.0): Padding around panel boundaries
+  - Increase if panel content is being cut off
+  - Decrease if you're getting too much bleed from adjacent panels
+
+### Files to Modify
+
+- **`utils/minimal_panel_clip.py`**: Core panel detection and clipping logic
+  - `_find_panel_anchors()`: Detects "Panel:" headers
+  - `_group_rows()`: Groups panels into rows (key for different grids)
+  - `panel_rects()`: Calculates panel boundaries
+  - `normalize_left_right()`: Fixes odd/even circuit placement
+
+- **`services/extraction_service.py`**: Integration point
+  - `ElectricalExtractor._extract_panels_separately()`: Applies clipping to panel schedules
+
+### Common Edge Cases
+
+- **3x2 grid (6 panels)**: Usually works with default tolerance; may need to reduce to 100-200 if panels are tightly spaced
+- **5x5 grid (25 panels)**: May need smaller tolerance (50-100) and reduced padding (5-8 points)
+- **Single column (1xN)**: Works automatically; no special handling needed
+- **Irregular layouts**: The midpoint approach adapts to any arrangement
+
+The system automatically detects panel schedules and applies clipping - no configuration needed for standard layouts.
+
 ## Performance
 
 - Caching (ENABLE_AI_CACHE=true): 20–30x faster on repeated runs
@@ -455,7 +540,12 @@ All text processing uses Chat Completions with response_format=json_object. OCR 
   - Reduce max tokens (DEFAULT_MODEL_MAX_TOKENS / LARGE_MODEL_MAX_TOKENS)
 - Rate limits / concurrency?
   - Adjust BATCH_SIZE to control number of workers
-  - There’s no global API semaphore; limit queue concurrency via BATCH_SIZE
+  - There's no global API semaphore; limit queue concurrency via BATCH_SIZE
+- Panel schedules showing cross-panel bleeding (circuits from one panel appearing in another)?
+  - This should be automatically handled by panel clipping
+  - If issues persist, run `python test_panel_grid_layouts.py <pdf_path>` to analyze panel detection
+  - Adjust `y_tolerance` in `utils/minimal_panel_clip.py` if panels aren't being grouped correctly
+  - Check logs for "Found X panels on page Y" messages to verify detection
 
 ## Permissions
 

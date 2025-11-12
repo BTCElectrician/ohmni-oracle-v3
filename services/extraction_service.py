@@ -12,6 +12,13 @@ import pymupdf as fitz
 
 from utils.performance_utils import time_operation, time_operation_context
 from utils.drawing_utils import detect_drawing_info
+from utils.minimal_panel_clip import (
+    panel_rects, 
+    normalize_left_right, 
+    get_panel_text_blocks, 
+    detect_column_headers,
+    extract_panel_with_column_mapping
+)
 
 
 class ExtractionResult:
@@ -728,9 +735,15 @@ class ElectricalExtractor(PyMuPdfExtractor):
 
         # Enhance extraction with electrical-specific processing
         try:
-            # Focus on panel schedules and circuit information
-            enhanced_text = self._enhance_panel_information(result.raw_text)
-            result.raw_text = enhanced_text
+            # Check if this is a panel schedule
+            if self._is_panel_schedule(result.raw_text):
+                # Use per-panel extraction
+                enhanced_text = await self._extract_panels_separately(file_path)
+                result.raw_text = enhanced_text
+            else:
+                # Use standard enhancement for non-panel drawings
+                enhanced_text = self._enhance_panel_information(result.raw_text)
+                result.raw_text = enhanced_text
 
             # Prioritize tables containing panel schedules
             prioritized_tables = self._prioritize_electrical_tables(result.tables)
@@ -869,6 +882,55 @@ IMPORTANT FOR JSON STRUCTURE:
                 other_tables.append(table)
 
         return panel_tables + other_tables
+    
+    async def _extract_panels_separately(self, file_path: str) -> str:
+        """Extract panels separately using clipping to prevent cross-panel bleeding."""
+        try:
+            doc = fitz.open(file_path)
+            all_panels_text = []
+            
+            # Process each page
+            for page_num, page in enumerate(doc):
+                # Get panel rectangles for this page
+                panels = panel_rects(page)
+                
+                if panels:
+                    self.logger.info(f"Found {len(panels)} panels on page {page_num + 1}")
+                    
+                    # Extract each panel separately
+                    for panel_name, rect in panels:
+                        # Extract text from this panel's rectangle
+                        panel_text = get_panel_text_blocks(page, rect)
+                        
+                        # Add panel header and markers
+                        panel_section = f"\n===PANEL {panel_name} BEGINS===\n"
+                        panel_section += f"Panel: {panel_name}\n"
+                        panel_section += panel_text
+                        panel_section += f"\n===PANEL {panel_name} ENDS===\n"
+                        
+                        all_panels_text.append(panel_section)
+                        
+                        self.logger.debug(f"Extracted panel {panel_name} with {len(panel_text)} chars")
+                else:
+                    # No panels detected on this page, extract normally
+                    page_text = page.get_text("text", sort=True)
+                    if page_text.strip():
+                        all_panels_text.append(page_text)
+            
+            doc.close()
+            
+            # Combine all panel texts
+            combined_text = "\n".join(all_panels_text)
+            
+            # Add structural hints for AI processing
+            combined_text = self._add_panel_structure_hints(combined_text)
+            
+            return combined_text
+            
+        except Exception as e:
+            self.logger.error(f"Error in per-panel extraction: {str(e)}")
+            # Fall back to regular extraction
+            raise
 
 
 class MechanicalExtractor(PyMuPdfExtractor):
