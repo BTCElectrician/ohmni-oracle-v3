@@ -113,7 +113,7 @@ def _run_transform(tmp_path: pathlib.Path, templates_only: bool = False) -> subp
         ]
     }
 
-    sheet_file = in_dir / "E2.03.json"
+    sheet_file = in_dir / "E2.03_structured.json"
     if not sheet_file.exists():
         sheet_file.write_text(json.dumps(sample_sheet))
 
@@ -156,7 +156,7 @@ def test_transform_full_run(tmp_path: pathlib.Path) -> None:
     assert unit_fact["attributes"]["panel"] == "S2"
 
     template_doc = templates[0]
-    assert template_doc["doc_type"] == "template"
+    assert template_doc["doc_type"] == "room"
     assert template_doc["room_id"] == "A4"
     assert "signed_off" in template_doc["template_tags"]
     assert "lighting" in template_doc["template_tags"]

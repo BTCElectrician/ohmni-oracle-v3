@@ -1,3 +1,81 @@
+## Indexing workflow (CLI commands)
+
+The pipeline writes all outputs for a job to `~/Desktop/<Job>/processed/` and mirrors that layout to Azure Blob. Use these commands to build and load the Azure AI Search index.
+
+### Prerequisites
+- Create and activate the venv (`make setup` then `source venv/bin/activate`).
+- Add the following to `.env`:  
+  - `AZURE_SEARCH_ENDPOINT=https://<service>.search.windows.net`  
+  - `AZURE_SEARCH_API_KEY=<admin_or_query_key>`  
+  - `INDEX_NAME=drawings_unified`  
+  - `AZURE_SEARCH_API_VERSION=2025-09-01` (optional, defaults to 2024-07-01)
+  - `OPENAI_API_KEY=<key>` (optional, for embeddings/vectors)
+
+### Command reference
+
+| Command | When to use | What it does |
+|---------|-------------|--------------|
+| `ohmni process <Job>` | First step for every job | Runs the full processing pipeline on `~/Desktop/<Job>/`; writes outputs to `~/Desktop/<Job>/processed/` and uploads to blob storage. |
+| `ohmni search <Job>` | After processing or schema changes | Regenerates JSONL payloads from `<Job>/processed/` and performs a **full rebuild** of the `drawings_unified` index (sheets + facts + templates). |
+| `ohmni search-templates <Job>` | After foremen update room templates | Regenerates `templates.jsonl` from `<Job>/processed/room-data/` and performs an **incremental** template-only upsert (sheets/facts unchanged). |
+| `ohmni file <Job/Subfolder/file.pdf>` | Process a single PDF within a job | Processes one PDF (temporary copy) and writes results back to the job's output tree. |
+| `ohmni help` | Anytime | Shows usage and lists job folders detected on your Desktop. |
+| `make index-set-project PROJECT="<id>"` | Once per job (optional) | Persists the default `project_id` in `.project_id`; subsequent `ohmni search` / `ohmni search-templates` will stamp this value into each document. |
+| `make index-check` | After indexing (optional) | Runs `query_playbook.py` to validate the index is responding with sample queries. |
+
+### Example workflow for a new job
+
+```bash
+# 1. Process the drawings
+ohmni process "20th Monroe"
+
+# 2. (Optional) Set the project ID for this job
+make index-set-project PROJECT="20th-monroe"
+
+# 3. Full index rebuild (sheets + facts + templates)
+ohmni search "20th Monroe"
+
+# 4. Later, after foremen edit templates
+ohmni search-templates "20th Monroe"
+
+# 5. (Optional) Sanity check
+make index-check
+```
+
+### Checking the index
+
+After running `ohmni search <Job>`, you can verify the index contents:
+
+1. **Azure Portal (Search Explorer)**  
+   - Navigate to your Search service → `drawings_unified` → **Search explorer**.
+   - Query body: `{ "search": "*", "top": 5, "count": true }`
+   - Returns document count and sample results (sheet, fact, or template docs).
+
+2. **REST API (curl/Postman)**  
+   ```bash
+   curl -X POST \
+     "https://aisearchohmni.search.windows.net/indexes/drawings_unified/docs/search?api-version=2025-09-01" \
+     -H "Content-Type: application/json" \
+     -H "api-key: <admin_or_query_key>" \
+     -d '{ "search": "*", "top": 5, "count": true }'
+   ```
+
+3. **Document count only**  
+   ```bash
+   curl -X GET \
+     "https://aisearchohmni.search.windows.net/indexes/drawings_unified/docs/\$count?api-version=2025-09-01" \
+     -H "api-key: <admin_or_query_key>"
+   ```
+
+4. **Filter by document type or project**  
+   Add `"$filter"` to your search request:
+   - `"$filter": "doc_type eq 'template' and tenant_id eq 'ohmni'"`
+   - `"$filter": "project_id eq 'ohmni-elecshuffletest'"`
+
+### Notes
+- The index supports semantic search (`semconf`) and hybrid vector search.
+- If you want vectors populated, ensure `OPENAI_API_KEY` is set in `.env` or exported in your shell before running the indexing commands.
+- The CLI wrappers (`ohmni search`, `ohmni search-templates`) automatically resolve `~/Desktop/<Job>/processed` for you—no need to type the full path.
 # Ohmni Oracle v3 — Construction Drawing Processor
 
 <div align="center">

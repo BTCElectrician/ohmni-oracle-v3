@@ -95,7 +95,7 @@ process_folder() {
     local folder_name="$1"
     local desktop_path="/Users/collin/Desktop"
     local full_path="$desktop_path/$folder_name"
-    
+
     # Check if folder exists
     if [ ! -d "$full_path" ]; then
         print_error "Folder '$folder_name' not found in Desktop"
@@ -204,52 +204,16 @@ run_search_pipeline() {
     local mode="$2" # full | templates
     local desktop_path="/Users/collin/Desktop"
     local full_path="$desktop_path/$folder_name"
+    local processed_path="$full_path/processed"
 
-    if [ ! -d "$full_path" ]; then
-        print_error "Folder '$folder_name' not found in Desktop"
-        print_info "Available folders:"
-        ls -1 "$desktop_path" | grep -v "^\.$" | grep -v "^\.\.$" | while read folder; do
-            if [ -d "$desktop_path/$folder" ]; then
-                echo "  📁 $folder"
-            fi
-        done
+    if [ ! -d "$processed_path" ]; then
+        print_error "Processed folder not found: $processed_path"
+        print_info "Run 'ohmni process $folder_name' first."
         return 1
     fi
 
     if ! ensure_repo_ready; then
         return 1
-    fi
-
-    local sheet_dir="$full_path/output/json"
-    local templates_root="$full_path/templates_run"
-    local postpass_dir="$full_path/output/postpass"
-
-    if [ ! -d "$sheet_dir" ]; then
-        print_error "Sheet JSON directory not found: $sheet_dir"
-        print_info "Run 'ohmni process $folder_name' first."
-        return 1
-    fi
-
-    if [ ! -d "$templates_root" ]; then
-        print_error "Templates directory not found: $templates_root"
-        print_info "Ensure foreman templates are copied to templates_run/."
-        return 1
-    fi
-
-    mkdir -p "$postpass_dir"
-
-    local project_id="${OHMNI_PROJECT_ID:-$(echo "$folder_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')}"
-    local transform_cmd=(python3 tools/schedule_postpass/transform.py "$sheet_dir" "$postpass_dir" "$project_id" --templates-root "$templates_root")
-    if [ "$mode" = "templates" ]; then
-        transform_cmd+=("--templates-only")
-    fi
-
-    print_info "Generating search documents (mode: $mode)..."
-    "${transform_cmd[@]}"
-    local exit_code=$?
-    if [ $exit_code -ne 0 ]; then
-        print_error "Post-pass transform failed (exit code: $exit_code)"
-        return $exit_code
     fi
 
     load_search_env
@@ -258,11 +222,30 @@ run_search_pipeline() {
         return 1
     fi
 
-    local upsert_cmd=(python3 tools/schedule_postpass/upsert_index.py --schema tools/schedule_postpass/unified_index.schema.json --templates "$postpass_dir/templates.jsonl")
+    local project_id_file=".project_id"
+    local project_id="${OHMNI_PROJECT_ID:-$(cat "$project_id_file" 2>/dev/null)}"
+    if [ -z "$project_id" ]; then
+        project_id=$(echo "$folder_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+    fi
+
+    local transform_cmd=(python3 tools/schedule_postpass/transform.py "$processed_path" tmp/index_out "$project_id" --templates-root "$processed_path/room-data")
     if [ "$mode" = "templates" ]; then
-        upsert_cmd+=(--mode incremental)
+        transform_cmd+=("--templates-only")
+    fi
+
+    print_info "Generating index payloads (mode: $mode) for $folder_name..."
+    "${transform_cmd[@]}"
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        print_error "Transform failed (exit code: $exit_code)"
+        return $exit_code
+    fi
+
+    local upsert_cmd=(python3 tools/schedule_postpass/upsert_index.py --schema tools/schedule_postpass/unified_index.schema.json)
+    if [ "$mode" = "templates" ]; then
+        upsert_cmd+=(--templates tmp/index_out/templates.jsonl --mode incremental)
     else
-        upsert_cmd+=(--synonyms tools/schedule_postpass/synonyms.seed.json --sheets "$postpass_dir/sheets.jsonl" --facts "$postpass_dir/facts.jsonl" --mode full)
+        upsert_cmd+=(--synonyms tools/schedule_postpass/synonyms.seed.json --sheets tmp/index_out/sheets.jsonl --facts tmp/index_out/facts.jsonl --templates tmp/index_out/templates.jsonl --mode full)
     fi
 
     print_info "Uploading to Azure Search ($( [ "$mode" = "templates" ] && echo "incremental" || echo "full" ))..."
@@ -273,8 +256,7 @@ run_search_pipeline() {
         return $exit_code
     fi
 
-    print_success "Azure Search load complete!"
-    print_info "Post-pass outputs located at: $postpass_dir"
+    print_success "Azure Search load complete for $folder_name."
     return 0
 }
 

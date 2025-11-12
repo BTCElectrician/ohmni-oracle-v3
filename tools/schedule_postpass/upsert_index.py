@@ -17,7 +17,9 @@ API_VERSION = os.environ.get("AZURE_SEARCH_API_VERSION", "2024-07-01")
 
 
 def _index_url(path: str) -> str:
-    return f"{AZURE_SEARCH_ENDPOINT}{path}?api-version={API_VERSION}"
+    delimiter = "" if AZURE_SEARCH_ENDPOINT.endswith("/") else "/"
+    base = f"{AZURE_SEARCH_ENDPOINT}{delimiter}{path.lstrip('/')}"
+    return f"{base}?api-version={API_VERSION}"
 
 
 def create_index(schema_path: pathlib.Path) -> None:
