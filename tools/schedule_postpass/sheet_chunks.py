@@ -140,9 +140,6 @@ def _make_chunk_doc(
     embedding = generate_embedding(content, client)
     if embedding:
         doc["content_vector"] = embedding
-        doc["embedding_status"] = "ok"
-    else:
-        doc["embedding_status"] = "none"
     if json_ptr:
         doc["json_ptr"] = json_ptr
     return doc

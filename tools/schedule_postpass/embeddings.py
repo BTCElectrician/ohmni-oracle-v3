@@ -15,7 +15,14 @@ try:
 except Exception:
     load_dotenv = None  # type: ignore
 
+try:
+    import tiktoken  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    tiktoken = None  # type: ignore
+
 logger = logging.getLogger(__name__)
+
+_MAX_EMBED_TOKENS = 7800  # Keep below text-embedding-3-large 8k context
 
 
 def generate_embedding(text: str, client: Optional[OpenAI]) -> Optional[List[float]]:
@@ -24,6 +31,9 @@ def generate_embedding(text: str, client: Optional[OpenAI]) -> Optional[List[flo
         return None
     trimmed = (text or "").strip()
     if not trimmed:
+        return None
+    if _exceeds_token_limit(trimmed):
+        logger.warning("Embedding skipped: content length exceeds %s tokens", _MAX_EMBED_TOKENS)
         return None
     try:
         resp = client.embeddings.create(model="text-embedding-3-large", input=trimmed)
@@ -49,4 +59,18 @@ def create_embedding_client() -> Optional[OpenAI]:
     except Exception as exc:  # pragma: no cover
         logger.warning("OpenAI client init failed: %s", exc)
         return None
+
+
+def _exceeds_token_limit(text: str) -> bool:
+    if not text:
+        return False
+    if tiktoken:
+        try:
+            enc = tiktoken.get_encoding("cl100k_base")
+            token_count = len(enc.encode(text, disallowed_special=()))
+            return token_count > _MAX_EMBED_TOKENS
+        except Exception:
+            pass
+    # Fallback heuristic: ~4 chars per token
+    return len(text) / 4 > _MAX_EMBED_TOKENS
 

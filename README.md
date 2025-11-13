@@ -74,7 +74,8 @@ After running `ohmni search <Job>`, you can verify the index contents:
 
 ### Notes
 - The index supports semantic search (`semconf`) and hybrid vector search.
-- If you want vectors populated, ensure `OPENAI_API_KEY` is set in `.env` or exported in your shell before running the indexing commands.
+- Vector embeddings are generated only for `doc_type="sheet_chunk"` documents; sheets and schedule rows remain scalar for filtering.
+- Embeddings require `OPENAI_API_KEY` in `.env` (or exported) **before** running the indexing commands. Chunk summaries longer than ~7.8K tokens are skipped automatically to avoid OpenAI context limits.
 - The CLI wrappers (`ohmni search`, `ohmni search-templates`) automatically resolve `~/Desktop/<Job>/processed` for you—no need to type the full path.
 # Ohmni Oracle v3 — Construction Drawing Processor
 
