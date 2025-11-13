@@ -146,6 +146,7 @@ def test_transform_full_run(tmp_path: pathlib.Path) -> None:
     assert facts_path.exists()
     facts = [json.loads(line) for line in facts_path.read_text().strip().splitlines()]
     assert len(facts) == 4
+    assert all(fact["doc_type"] == "schedule_row" for fact in facts)
 
     templates_path = out_dir / "templates.jsonl"
     assert templates_path.exists()
@@ -154,6 +155,22 @@ def test_transform_full_run(tmp_path: pathlib.Path) -> None:
 
     unit_fact = next(f for f in facts if f["schedule_type"] == "unit_plan" and f["key"]["tag"] == "Dishwasher")
     assert unit_fact["attributes"]["panel"] == "S2"
+    assert unit_fact["panel_name"] == "S2"
+    assert "content_vector" not in unit_fact
+
+    drawings_path = out_dir / "drawings_unified.jsonl"
+    assert drawings_path.exists()
+    drawings = [json.loads(line) for line in drawings_path.read_text().strip().splitlines()]
+    chunk_docs = [doc for doc in drawings if doc.get("doc_type") == "sheet_chunk"]
+    schedule_docs = [doc for doc in drawings if doc.get("doc_type") == "schedule_row"]
+    assert schedule_docs and len(schedule_docs) == len(facts)
+    assert chunk_docs, "Expected at least one sheet chunk document"
+    panel_chunk = chunk_docs[0]
+    assert panel_chunk["chunk_type"] == "panel_schedule"
+    assert panel_chunk["json_ptr"] == "/blocks/1"
+    assert panel_chunk["id"].endswith("-chunk-0001")
+    assert panel_chunk["page"] == 1
+    assert panel_chunk["content"].startswith("E2.03 Panel Schedule")
 
     template_doc = templates[0]
     assert template_doc["doc_type"] == "room"
@@ -180,6 +197,7 @@ def test_transform_templates_only(tmp_path: pathlib.Path) -> None:
     _run_transform(tmp_path)
     out_dir = tmp_path / "out"
     facts_before = (out_dir / "facts.jsonl").read_text()
+    drawings_before = (out_dir / "drawings_unified.jsonl").read_text()
     templates_dir = tmp_path / "templates_root"
     updated_template = dict(SAMPLE_TEMPLATE_ELEC)
     updated_template["template_status"] = "in_progress"
@@ -194,3 +212,4 @@ def test_transform_templates_only(tmp_path: pathlib.Path) -> None:
 
     assert (out_dir / "sheets.jsonl").exists()
     assert (out_dir / "facts.jsonl").read_text() == facts_before
+    assert (out_dir / "drawings_unified.jsonl").read_text() == drawings_before

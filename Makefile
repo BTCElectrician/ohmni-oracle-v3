@@ -11,7 +11,8 @@ ifneq (,$(wildcard .env))
     AZURE_SEARCH_API_KEY := $(subst ",,$(strip $(AZURE_SEARCH_API_KEY)))
     INDEX_NAME := $(subst ",,$(strip $(INDEX_NAME)))
     AZURE_SEARCH_API_VERSION := $(subst ",,$(strip $(AZURE_SEARCH_API_VERSION)))
-    export AZURE_SEARCH_ENDPOINT AZURE_SEARCH_API_KEY INDEX_NAME AZURE_SEARCH_API_VERSION
+    OPENAI_API_KEY := $(subst ",,$(strip $(OPENAI_API_KEY)))
+    export AZURE_SEARCH_ENDPOINT AZURE_SEARCH_API_KEY INDEX_NAME AZURE_SEARCH_API_VERSION OPENAI_API_KEY
 endif
 
 PROJECT_FILE ?= .project_id
@@ -183,6 +184,7 @@ index-rebuild: index-pack
 	  --synonyms tools/schedule_postpass/synonyms.seed.json \
 	  --sheets $(INDEX_OUT_DIR)/sheets.jsonl \
 	  --facts  $(INDEX_OUT_DIR)/facts.jsonl \
+	  --drawings $(INDEX_OUT_DIR)/drawings_unified.jsonl \
 	  --templates $(INDEX_OUT_DIR)/templates.jsonl \
 	  --mode full
 	@echo "✅ Index rebuild complete"

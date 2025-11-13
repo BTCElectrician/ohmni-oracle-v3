@@ -113,6 +113,7 @@ def main() -> None:
     parser.add_argument("--schema", required=True, help="path to unified_index.schema.json")
     parser.add_argument("--sheets", default="", help="path to sheets.jsonl")
     parser.add_argument("--facts", default="", help="path to facts.jsonl")
+    parser.add_argument("--drawings", default="", help="path to drawings_unified.jsonl")
     parser.add_argument("--templates", default="", help="path to templates.jsonl")
     parser.add_argument("--synonyms", default="", help="path to synonyms.seed.json")
     parser.add_argument(
@@ -134,6 +135,8 @@ def main() -> None:
         upload_jsonl(pathlib.Path(args.sheets))
     if args.facts:
         upload_jsonl(pathlib.Path(args.facts))
+    if args.drawings:
+        upload_jsonl(pathlib.Path(args.drawings))
     if args.templates:
         upload_jsonl(pathlib.Path(args.templates))
 

@@ -51,7 +51,7 @@ def iter_template_docs(
 ) -> Iterable[Dict[str, Any]]:
     """Generate template documents from JSON template files."""
     for path in sorted(template_root.rglob("*.json")):
-        if sheet_filter and sheet_filter not in path.name:
+        if sheet_filter and sheet_filter not in str(path):
             continue
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))

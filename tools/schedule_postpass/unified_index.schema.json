@@ -6,6 +6,7 @@
     {"name":"tenant_id","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
     {"name":"project","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
     {"name":"project_id","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"job_number","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
 
     {"name":"template_type","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
     {"name":"template_id","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
@@ -50,9 +51,17 @@
     {"name":"source_pdf_etag","type":"Edm.String","searchable":false,"filterable":true,"sortable":false,"facetable":false},
     {"name":"source_structured_json_path","type":"Edm.String","searchable":false,"filterable":true,"sortable":false,"facetable":false},
     {"name":"source_template_json_path","type":"Edm.String","searchable":false,"filterable":true,"sortable":false,"facetable":false},
+    {"name":"source_account","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"source_container","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"source_blob","type":"Edm.String","searchable":true,"filterable":true,"sortable":false,"facetable":false},
+    {"name":"source_uri","type":"Edm.String","searchable":false,"filterable":false,"sortable":false,"facetable":false},
+    {"name":"source_storage_name","type":"Edm.String","searchable":false,"filterable":true,"sortable":false,"facetable":false},
 
     {"name":"sheet_number","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
     {"name":"sheet_title","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
+    {"name":"chunk_type","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"page","type":"Edm.Int32","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"json_ptr","type":"Edm.String","searchable":false,"filterable":false,"sortable":false,"facetable":false},
     {"name":"discipline","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
 
     {"name":"revision","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
@@ -66,6 +75,12 @@
     {"name":"content_vector","type":"Collection(Edm.Single)","searchable":true,"dimensions":3072,"vectorSearchProfile":"vprof","filterable":false,"sortable":false,"facetable":false},
 
     {"name":"schedule_type","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"panel_name","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+    {"name":"circuit_number","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+    {"name":"poles","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"amps","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+    {"name":"kva","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":false},
+    {"name":"description","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
 
     {"name":"key","type":"Edm.ComplexType","fields":[
       {"name":"panel","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
@@ -157,7 +172,7 @@
   "suggesters": [{
     "name": "sg",
     "searchMode": "analyzingInfixMatching",
-    "sourceFields": ["sheet_number","sheet_title","room_id","room_name","key/panel","key/tag"]
+    "sourceFields": ["sheet_number","sheet_title","room_id","room_name","panel_name","key/panel","key/tag"]
   }],
   "scoringProfiles": [{
     "name":"freshness_boost",
