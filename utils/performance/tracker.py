@@ -52,6 +52,10 @@ class PerformanceTracker:
             "total_time": 0,
             "count": 0,
         }
+
+        # Store actual wall-clock elapsed time (not cumulative worker time)
+        self.actual_elapsed_time = None
+
         self.logger = logging.getLogger(__name__)
 
     def add_metric(
@@ -84,6 +88,18 @@ class PerformanceTracker:
         self.api_stats["max_time"] = max(self.api_stats["max_time"], duration)
         self.api_stats["total_time"] += duration
         self.api_stats["count"] += 1
+
+    def set_actual_elapsed_time(self, elapsed_seconds: float):
+        """
+        Set the actual wall-clock elapsed time for the entire run.
+
+        This is different from summing individual file processing times,
+        especially when files are processed in parallel.
+
+        Args:
+            elapsed_seconds: Total wall-clock time in seconds from start to finish
+        """
+        self.actual_elapsed_time = elapsed_seconds
 
     def add_metric_with_context(
         self,
@@ -257,7 +273,7 @@ class PerformanceTracker:
         ocr_log = build_ocr_decision_log(self.metrics, file_costs)
         report["ocr_decision_log"] = ocr_log
 
-        scaling = build_scaling_projections(self.metrics, cost_analysis)
+        scaling = build_scaling_projections(self.metrics, cost_analysis, self.actual_elapsed_time)
         report["scaling_projections"] = scaling
 
         drawing_costs = build_drawing_type_costs(file_costs, ocr_log)

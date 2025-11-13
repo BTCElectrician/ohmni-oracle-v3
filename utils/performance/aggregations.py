@@ -311,12 +311,29 @@ def build_drawing_type_costs(
 
 
 def build_scaling_projections(
-    metrics: Dict[str, List[Dict[str, Any]]], cost_analysis: Dict[str, Any]
+    metrics: Dict[str, List[Dict[str, Any]]], cost_analysis: Dict[str, Any],
+    actual_elapsed_time: Optional[float] = None
 ) -> Dict[str, Any]:
-    """Project throughput and spend at larger scales."""
+    """Project throughput and spend at larger scales.
+
+    Args:
+        metrics: Dictionary of collected metrics
+        cost_analysis: Cost analysis data
+        actual_elapsed_time: Actual wall-clock elapsed time in seconds.
+            If provided, this is used instead of summing individual file durations.
+            This is important for parallel processing where summing durations
+            would give cumulative worker time, not actual elapsed time.
+    """
     total_processing = metrics.get("total_processing", [])
     files_processed = len(total_processing)
-    total_time = sum(m.get("duration", 0.0) for m in total_processing)
+
+    # Use actual elapsed time if provided (for parallel processing),
+    # otherwise fall back to summing individual durations (for sequential processing)
+    if actual_elapsed_time is not None:
+        total_time = actual_elapsed_time
+    else:
+        total_time = sum(m.get("duration", 0.0) for m in total_processing)
+
     avg_time = (total_time / files_processed) if files_processed else 0.0
 
     cost_summary = cost_analysis.get("cost_summary", {})

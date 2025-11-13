@@ -89,6 +89,8 @@ async def main_async():
 
             # 6) Generate performance report
             tracker = get_tracker()
+            # Store actual elapsed time (wall-clock) before generating report
+            tracker.set_actual_elapsed_time(total_time)
             tracker.log_report()
 
             # Save metrics to file for historical comparison
