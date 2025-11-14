@@ -96,6 +96,7 @@ def _build_fact_doc(
         "schedule-row",
         stable_key(stype, key),
     )
+    page_number = meta.get("page", 1)
     doc = {
         "id": doc_id,
         "doc_type": "schedule_row",
@@ -115,6 +116,8 @@ def _build_fact_doc(
         "attributes": attrs,
         "labels": labels,
         "content": summary,
+        "page": page_number,
+        "source_pdf_page": page_number,
     }
     if "source_account" in meta:
         doc["source_account"] = meta["source_account"]

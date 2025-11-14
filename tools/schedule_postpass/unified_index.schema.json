@@ -61,6 +61,7 @@
     {"name":"sheet_title","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
     {"name":"chunk_type","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
     {"name":"page","type":"Edm.Int32","searchable":false,"filterable":true,"sortable":true,"facetable":true},
+    {"name":"source_pdf_page","type":"Edm.Int32","searchable":false,"filterable":true,"sortable":true,"facetable":true},
     {"name":"json_ptr","type":"Edm.String","searchable":false,"filterable":false,"sortable":false,"facetable":false},
     {"name":"discipline","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
 

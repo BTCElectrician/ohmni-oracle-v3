@@ -34,7 +34,8 @@ def iter_sheet_chunks(
     Yield sheet chunk documents covering panel/mechanical/plumbing schedules and notes.
     """
     chunk_idx = 1
-    page_number = _infer_page(raw_json)
+    # Use page from metadata (populated by sheet_meta via infer_page)
+    page_number = meta.get("page", 1)
 
     for chunk_type, schedule_type, iterator, json_ptr in CHUNK_SOURCES:
         rows, pointer = _collect_schedule_rows(raw_json, schedule_type, iterator, json_ptr)
@@ -81,18 +82,6 @@ def iter_sheet_chunks(
         )
 
 
-def _infer_page(raw_json: Dict[str, Any]) -> int:
-    for key in ("page_number", "page", "sheet_index"):
-        value = raw_json.get(key)
-        if isinstance(value, int) and value > 0:
-            return value
-        try:
-            parsed = int(str(value).strip())
-            if parsed > 0:
-                return parsed
-        except Exception:
-            continue
-    return 1
 
 
 def _sanitize_path_component(value: Optional[str], fallback: str) -> str:
@@ -131,6 +120,7 @@ def _make_chunk_doc(
         "source_file": meta.get("source_file"),
         "chunk_type": chunk_type,
         "page": page_number,
+        "source_pdf_page": page_number,
         "content": content,
     }
     for key in ("source_account", "source_container", "source_blob", "source_uri", "source_storage_name"):

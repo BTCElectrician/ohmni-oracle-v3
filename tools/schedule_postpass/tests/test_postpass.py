@@ -75,6 +75,7 @@ def _run_transform(tmp_path: pathlib.Path, templates_only: bool = False) -> subp
         "revision_date": "2025-04-18",
         "source_file": "electrical/E2.03.pdf",
         "content": "Full sheet text content...",
+        "page_number": 2,  # Test non-default page number
         "blocks": [
             {
                 "type": "unit schedule",
@@ -157,6 +158,9 @@ def test_transform_full_run(tmp_path: pathlib.Path) -> None:
     assert unit_fact["attributes"]["panel"] == "S2"
     assert unit_fact["panel_name"] == "S2"
     assert "content_vector" not in unit_fact
+    # Verify page fields are populated on schedule_row docs
+    assert unit_fact["page"] == 2
+    assert unit_fact["source_pdf_page"] == 2
 
     drawings_path = out_dir / "drawings_unified.jsonl"
     assert drawings_path.exists()
@@ -169,8 +173,17 @@ def test_transform_full_run(tmp_path: pathlib.Path) -> None:
     assert panel_chunk["chunk_type"] == "panel_schedule"
     assert panel_chunk["json_ptr"] == "/blocks/1"
     assert panel_chunk["id"].endswith("-chunk-0001")
-    assert panel_chunk["page"] == 1
+    # Verify page fields are populated on sheet_chunk docs
+    assert panel_chunk["page"] == 2
+    assert panel_chunk["source_pdf_page"] == 2
     assert panel_chunk["content"].startswith("E2.03 Panel Schedule")
+    
+    # Verify all schedule_row docs have page fields
+    for schedule_doc in schedule_docs:
+        assert "page" in schedule_doc
+        assert "source_pdf_page" in schedule_doc
+        assert schedule_doc["page"] == schedule_doc["source_pdf_page"]
+        assert schedule_doc["page"] == 2  # From sample_sheet["page_number"]
 
     template_doc = templates[0]
     assert template_doc["doc_type"] == "room"

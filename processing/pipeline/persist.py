@@ -120,6 +120,37 @@ async def step_save_output(
         parsed_json = state["parsed_json_data"]
         if isinstance(parsed_json, dict):
             parsed_json["tenant_id"] = tenant_id
+            
+            # Capture page_number for ETL consumption
+            # Prefer parser-provided hints, fallback to extraction-derived default
+            page_number = None
+            for key in ("page_number", "page", "sheet_index"):
+                value = parsed_json.get(key)
+                if isinstance(value, int) and value > 0:
+                    page_number = value
+                    break
+                try:
+                    parsed = int(str(value).strip())
+                    if parsed > 0:
+                        page_number = parsed
+                        break
+                except Exception:
+                    continue
+            
+            # If parser didn't provide page info, derive from extraction metadata
+            if page_number is None:
+                extraction_result = state.get("extraction_result")
+                if extraction_result and extraction_result.metadata:
+                    page_count = extraction_result.metadata.get("page_count", 1)
+                    # For single-page docs, default to page 1; multi-page detection can be enhanced later
+                    page_number = 1 if page_count <= 1 else 1
+            
+            # Default to 1 if all else fails
+            if page_number is None:
+                page_number = 1
+            
+            # Persist as page_number (ETL will read this)
+            parsed_json["page_number"] = page_number
         
         saved = await services["storage"].save_json(
             parsed_json,

@@ -13,6 +13,7 @@ except Exception:  # pragma: no cover - optional dependency at runtime
 
 from .embeddings import generate_embedding
 from .ids import make_document_id
+from .page_utils import infer_page
 
 
 def _to_iso_date(value: Any) -> str:
@@ -172,6 +173,7 @@ def sheet_meta(raw: Dict[str, Any], project_id: str) -> Dict[str, Any]:
         "levels": levels,
         "source_file": source_file,
         "content": content,
+        "page": infer_page(raw),
     }
     meta.update(_derive_source_fields(raw))
     return meta
