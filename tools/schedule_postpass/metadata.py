@@ -49,6 +49,15 @@ def _coerce_str(value: Any) -> Optional[str]:
     return str(value).strip()
 
 
+def _infer_discipline_from_sections(raw: Dict[str, Any]) -> Optional[str]:
+    """Infer discipline from top-level discipline sections when explicit discipline is missing."""
+    known_disciplines = {"ELECTRICAL", "MECHANICAL", "PLUMBING", "ARCHITECTURAL"}
+    found = [key for key in known_disciplines if key in raw and isinstance(raw[key], dict)]
+    if len(found) == 1:
+        return found[0].lower()
+    return None
+
+
 def _derive_source_fields(raw: Dict[str, Any]) -> Dict[str, Optional[str]]:
     """Best-effort extraction of storage account/container/blob identifiers."""
     source_doc = raw.get("source_document") or raw.get("source_document_info")
@@ -119,10 +128,12 @@ def sheet_meta(raw: Dict[str, Any], project_id: str) -> Dict[str, Any]:
         or raw.get("title")
         or ""
     )
-    discipline = (
-        (raw.get("discipline") or drawing_meta.get("discipline") or "").lower()
-        or "architectural"
-    )
+    explicit_discipline = (raw.get("discipline") or drawing_meta.get("discipline") or "").strip().lower()
+    if explicit_discipline:
+        discipline = explicit_discipline
+    else:
+        inferred = _infer_discipline_from_sections(raw)
+        discipline = inferred or "architectural"
     revision = (
         raw.get("revision")
         or drawing_meta.get("revision")

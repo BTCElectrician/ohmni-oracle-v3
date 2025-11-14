@@ -245,7 +245,7 @@ run_search_pipeline() {
     if [ "$mode" = "templates" ]; then
         upsert_cmd+=(--templates tmp/index_out/templates.jsonl --mode incremental)
     else
-        upsert_cmd+=(--synonyms tools/schedule_postpass/synonyms.seed.json --sheets tmp/index_out/sheets.jsonl --facts tmp/index_out/facts.jsonl --templates tmp/index_out/templates.jsonl --mode full)
+        upsert_cmd+=(--synonyms tools/schedule_postpass/synonyms.seed.json --sheets tmp/index_out/sheets.jsonl --facts tmp/index_out/facts.jsonl --drawings tmp/index_out/drawings_unified.jsonl --templates tmp/index_out/templates.jsonl --mode full)
     fi
 
     print_info "Uploading to Azure Search ($( [ "$mode" = "templates" ] && echo "incremental" || echo "full" ))..."
