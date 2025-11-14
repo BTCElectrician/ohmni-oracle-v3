@@ -22,7 +22,8 @@ except Exception:  # pragma: no cover - optional dependency
 
 logger = logging.getLogger(__name__)
 
-_MAX_EMBED_TOKENS = 7800  # Keep below text-embedding-3-large 8k context
+EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+_MAX_EMBED_TOKENS = 7800  # Keep below text-embedding-3-small 8k context
 
 
 def generate_embedding(text: str, client: Optional[OpenAI]) -> Optional[List[float]]:
@@ -36,7 +37,7 @@ def generate_embedding(text: str, client: Optional[OpenAI]) -> Optional[List[flo
         logger.warning("Embedding skipped: content length exceeds %s tokens", _MAX_EMBED_TOKENS)
         return None
     try:
-        resp = client.embeddings.create(model="text-embedding-3-large", input=trimmed)
+        resp = client.embeddings.create(model=EMBEDDING_MODEL, input=trimmed)
     except Exception as exc:  # pragma: no cover - depends on API availability
         logger.warning("Embedding generation failed (skipping vector): %s", exc)
         return None

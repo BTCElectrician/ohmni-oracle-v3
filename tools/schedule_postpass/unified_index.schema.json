@@ -72,7 +72,7 @@
     {"name":"source_file","type":"Edm.String","searchable":false,"filterable":false,"sortable":false,"facetable":false},
 
     {"name":"content","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
-    {"name":"content_vector","type":"Collection(Edm.Single)","searchable":true,"dimensions":3072,"vectorSearchProfile":"vprof","filterable":false,"sortable":false,"facetable":false},
+    {"name":"content_vector","type":"Collection(Edm.Single)","searchable":true,"dimensions":1536,"vectorSearchProfile":"vprof","filterable":false,"sortable":false,"facetable":false},
 
     {"name":"schedule_type","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
     {"name":"panel_name","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},

@@ -48,7 +48,7 @@ def generate_query_embedding(text: str) -> Optional[List[float]]:
     if not EMBEDDING_CLIENT or not text or not text.strip():
         return None
     try:
-        resp = EMBEDDING_CLIENT.embeddings.create(model="text-embedding-3-large", input=text)
+        resp = EMBEDDING_CLIENT.embeddings.create(model="text-embedding-3-small", input=text)
         return resp.data[0].embedding
     except Exception as exc:  # pragma: no cover
         print(f"Embedding generation failed: {exc}", file=sys.stderr)

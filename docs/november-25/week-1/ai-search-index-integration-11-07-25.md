@@ -39,7 +39,7 @@ This is the complete drop-in package.
   * The `query_playbook.py` script provides a simple developer test to verify the data load. The *real* query logic (the "facts-first, sheets-fallback" pattern) will be implemented in your existing Azure Function.
   * The one-index design (`drawings_unified`) remains required. `doc_type` partitions sheets vs. row facts vs. templates.
   * Load `synonyms.seed.json` into an Azure AI Search synonym map and attach it to the searchable fields (a one-time setup).
-  * Basic tier ($75/mo) supports semantic ranking (1K semantic queries/month free), hybrid vector search, scoring profiles, facets, suggesters, and synonym maps. Fresh embeddings via `text-embedding-3-large` run about $0.13 per million tokens, so even big refreshes stay well under $1.
+  * Basic tier ($75/mo) supports semantic ranking (1K semantic queries/month free), hybrid vector search, scoring profiles, facets, suggesters, and synonym maps. Fresh embeddings via `text-embedding-3-small` run about $0.02 per million tokens, so even big refreshes stay well under $1.
   * **Template JSON** (electrical + architectural) now rides the same deterministic pipeline: copy the filled templates into the run folder and pass `--templates-root` to `transform.py` so each index refresh includes the foreman-authored truth.
   * Bake the `README.md` + `pytest` from this folder into the PRD acceptance criteria so anyone can follow the runbook and CI can catch regressions.
 
@@ -102,7 +102,7 @@ The `content` field stays a short, human-readable summary (used by Search and th
 
 ## 4\) `tools/schedule_postpass/unified_index.schema.json`
 
-> Name your index e.g. `drawings_unified`. This carries **sheets**, **facts**, and **templates**. The embedding dimension is locked to 3072 for `text-embedding-3-large`.
+> Name your index e.g. `drawings_unified`. This carries **sheets**, **facts**, and **templates**. The embedding dimension is locked to 1536 for `text-embedding-3-small`.
 
 ```json
 {
@@ -138,7 +138,7 @@ The `content` field stays a short, human-readable summary (used by Search and th
 
     /* SHEET/TEMPLATE/FACT content */
     {"name":"content","type":"Edm.String","searchable":true,"filterable":false,"sortable":false,"facetable":false,"synonymMaps":["project-synonyms"]},
-    {"name":"content_vector","type":"Collection(Edm.Single)","searchable":true,"dimensions":3072,"vectorSearchProfile":"vprof","filterable":false,"sortable":false,"facetable":false},
+    {"name":"content_vector","type":"Collection(Edm.Single)","searchable":true,"dimensions":1536,"vectorSearchProfile":"vprof","filterable":false,"sortable":false,"facetable":false},
 
     /* FACT fields */
     {"name":"schedule_type","type":"Edm.String","searchable":false,"filterable":true,"sortable":true,"facetable":true},
@@ -278,7 +278,7 @@ def generate_embedding(text: str, client: Optional[OpenAI]) -> Optional[List[flo
         return None
     try:
         resp = client.embeddings.create(
-            model="text-embedding-3-large",
+            model="text-embedding-3-small",
             input=trimmed
         )
         return resp.data[0].embedding
@@ -1230,7 +1230,7 @@ def generate_query_embedding(text: str) -> Optional[List[float]]:
         return None
     try:
         resp = EMBEDDING_CLIENT.embeddings.create(
-            model="text-embedding-3-large",
+            model="text-embedding-3-small",
             input=text
         )
         return resp.data[0].embedding
@@ -1550,7 +1550,7 @@ python tools/schedule_postpass/transform.py \
   --templates-root /path/to/templates_run
 ````
 
-Generates embeddings for vector search using OpenAI `text-embedding-3-large`.
+Generates embeddings for vector search using OpenAI `text-embedding-3-small`.
 Embedding cost: ~$0.78 per 12-story building (one-time, updates only changed docs).
 
 To update *only* foreman-edited room templates (skipping sheet/fact reprocessing):
