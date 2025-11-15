@@ -43,6 +43,7 @@ help:
 	@echo "  make index-pack         - Regenerate sheets/facts/templates JSONL payloads"
 	@echo "  make index-rebuild      - Recreate drawings_unified and upload all docs"
 	@echo "  make index-templates    - Incremental template-only upsert"
+	@echo "  make index-validate     - Validate coverage for all structured JSON files"
 	@echo "  make index-check        - Run query_playbook sanity checks"
 	@echo "  make index-set-project PROJECT=<id> - Persist default project id for indexing"
 	@echo "    (Override source path with SOURCE=/absolute/path/to/processed)"
@@ -200,6 +201,17 @@ index-templates: index-pack
 index-check: check-env
 	@echo "🔍 Running query_playbook sanity checks..."
 	python3 tools/schedule_postpass/query_playbook.py
+
+index-validate: check-env
+	@if [ -z "$(SOURCE)" ]; then \
+		echo "❌ Error: SOURCE parameter required"; \
+		echo "Usage: make index-validate SOURCE=/path/to/processed"; \
+		echo "Example: make index-validate SOURCE=/path/to/job/processed"; \
+		exit 1; \
+	fi
+	@echo "🔍 Validating coverage for all structured JSON files..."
+	@echo "   Source: $(SOURCE)"
+	python3 tools/schedule_postpass/check_all_coverage.py $(SOURCE)
 
 index-set-project:
 	@if [ -z "$(PROJECT)" ]; then \
