@@ -209,11 +209,30 @@ def segment_panels(
         y_top = max(page_rect.y0, min(a[1].y0 for a in row) - 3 * pad)
         
         # Bottom boundary: halfway to next row's headers, or page bottom
+        # For last row, ensure we capture full height by going to page bottom
         if r_idx + 1 < len(rows):
             next_row_top = min(a[1].y0 for a in rows[r_idx + 1])
-            y_bottom = y_top + (next_row_top - y_top) / 2.0
+            # Use 75% of distance to next row instead of 50% to capture more content
+            y_bottom = y_top + (next_row_top - y_top) * 0.75
         else:
+            # Last row: go to page bottom, but ensure we don't cut off content
+            # Look for text blocks below the anchor to determine actual panel height
             y_bottom = page_rect.y1
+            # Try to detect actual panel content extent by looking for circuit numbers
+            # below the anchor (circuits typically extend well below the header)
+            words = page.get_text("words", sort=True)
+            max_y_for_row = max(a[1].y1 for a in row)
+            # Find the maximum y-coordinate of text that could belong to this row's panels
+            for word in words:
+                word_y = word[1]  # y0 of word
+                # If word is below anchor row and within reasonable horizontal bounds
+                if word_y > max_y_for_row and word_y < page_rect.y1:
+                    # Check if word is horizontally aligned with any panel in this row
+                    for name, a_rect in row:
+                        if a_rect.x0 - 50 <= word[0] <= a_rect.x1 + 50:
+                            # Potential panel content - extend bottom boundary
+                            y_bottom = max(y_bottom, word[3] + pad)  # word[3] is y1
+                            break
         
         # Horizontal bounds per panel: midpoints between neighbors
         for j, (name, a_rect) in enumerate(row):
@@ -226,6 +245,14 @@ def segment_panels(
             rect = fitz.Rect(
                 x_left + pad, y_top + 2 * pad, x_right - pad, y_bottom - pad
             )
+            
+            # Log panel dimensions for debugging
+            if logger:
+                logger.debug(
+                    f"panel_segmented: {name} rect=[{rect.x0:.1f},{rect.y0:.1f},"
+                    f"{rect.x1:.1f},{rect.y1:.1f}] height={rect.height:.1f}"
+                )
+            
             rects.append((name, rect))
     
     # Resolve overlaps

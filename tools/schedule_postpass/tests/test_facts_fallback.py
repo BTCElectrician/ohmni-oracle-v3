@@ -326,3 +326,119 @@ def test_no_discipline_sections_no_crash(mock_meta, mock_client):
     facts = list(emit_facts(raw_json, mock_meta, mock_client))
     assert len(facts) == 0
 
+
+def test_electrical_paired_circuits_with_phase_loads_text(mock_meta, mock_client):
+    """Test that right_side circuits and descriptive text in phase_loads are captured."""
+    raw_json = {
+        "ELECTRICAL": {
+            "panels": [
+                {
+                    "panel_name": "L1",
+                    "enclosure_info": {
+                        "volts": "120/208 Wye"
+                    },
+                    "circuits": [
+                        {
+                            "circuit_number": 15,
+                            "load_name": "CU-1.2",
+                            "trip": "50 A",
+                            "poles": 3,
+                            "phase_loads": {
+                                "A": "11473 VA",
+                                "B": "MV-400 (Surge Protector)",
+                                "C": None
+                            },
+                            "right_side": {
+                                "circuit_number": 16,
+                                "load_name": "CU-1.3",
+                                "trip": "50 A",
+                                "poles": 3,
+                                "phase_loads": {
+                                    "A": "20 A",
+                                    "B": None,
+                                    "C": None
+                                }
+                            }
+                        },
+                        {
+                            "ckt": "13",
+                            "load_name": None,
+                            "trip": None,
+                            "poles": None,
+                            "phase_loads": {
+                                "A": "11473 VA",
+                                "B": "11473 VA",
+                                "C": None
+                            },
+                            "right_side": {
+                                "circuit_number": 14,
+                                "load_name": None,
+                                "trip": None,
+                                "poles": None,
+                                "phase_loads": {
+                                    "A": None,
+                                    "B": None,
+                                    "C": None
+                                }
+                            }
+                        }
+                    ]
+                },
+                {
+                    "panel_id": "H1",
+                    "enclosure_info": {
+                        "volts": "480/277 Wye"
+                    },
+                    "circuits": [
+                        {
+                            "ckt": "13",
+                            "load_name": None,
+                            "trip": None,
+                            "poles": None,
+                            "ckt_b": "14",
+                            "load_name_b": None,
+                            "trip_b": "20 A",
+                            "poles_b": 1,
+                            "phase_loads": {
+                                "A": "11473 VA",
+                                "B": "Surge Protector",
+                                "C": None
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+
+    facts = list(emit_facts(raw_json, mock_meta, mock_client))
+    assert len(facts) >= 4  # At least 4 circuits should be emitted
+    
+    # Verify Panel L1 circuit 15 is emitted
+    l1_c15 = next((f for f in facts if f.get("panel_name") == "L1" and f.get("circuit_number") == "15"), None)
+    assert l1_c15 is not None
+    assert l1_c15["description"] == "CU-1.2"
+    
+    # Verify Panel L1 circuit 16 (right_side) is emitted
+    l1_c16 = next((f for f in facts if f.get("panel_name") == "L1" and f.get("circuit_number") == "16"), None)
+    assert l1_c16 is not None
+    assert l1_c16["description"] == "CU-1.3"
+    
+    # Verify Panel L1 circuit 13 is emitted
+    l1_c13 = next((f for f in facts if f.get("panel_name") == "L1" and f.get("circuit_number") == "13"), None)
+    assert l1_c13 is not None
+    
+    # Verify Panel L1 circuit 14 (right_side) is emitted
+    l1_c14 = next((f for f in facts if f.get("panel_name") == "L1" and f.get("circuit_number") == "14"), None)
+    assert l1_c14 is not None
+    
+    # Verify Panel H1 circuit 13 is emitted
+    h1_c13 = next((f for f in facts if f.get("panel_name") == "H1" and f.get("circuit_number") == "13"), None)
+    assert h1_c13 is not None
+    
+    # Verify Panel H1 circuit 14 (from ckt_b) is emitted with surge protector description
+    h1_c14 = next((f for f in facts if f.get("panel_name") == "H1" and f.get("circuit_number") == "14"), None)
+    assert h1_c14 is not None
+    assert "surge" in h1_c14.get("description", "").lower() or "surge" in h1_c14.get("content", "").lower()
+    assert h1_c14.get("amps") == "20 A"
+

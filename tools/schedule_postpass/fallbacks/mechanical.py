@@ -49,8 +49,8 @@ def iter_mech_rows(raw_json: Dict[str, Any]) -> Generator[Dict[str, Any], None, 
                     if isinstance(item, dict):
                         yield item
             elif isinstance(val, dict):
-                # Dict with nested lists - check common keys like 'fans', 'devices', 'units', 'equipment'
-                for nested_key in ("fans", "devices", "units", "equipment", "items", "rows"):
+                # Dict with nested lists - check common keys like 'fans', 'devices', 'units', 'equipment', 'louvers'
+                for nested_key in ("fans", "devices", "units", "equipment", "items", "rows", "louvers"):
                     nested_list = ci_get(val, nested_key)
                     if isinstance(nested_list, list):
                         for item in nested_list:

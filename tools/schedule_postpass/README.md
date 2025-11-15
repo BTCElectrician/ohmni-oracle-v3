@@ -183,8 +183,83 @@ Common aliases we already handle:
 
 If counts drop to zero unexpectedly, double-check the iterator for typos and verify the extractor didn’t change naming conventions.
 
-## 8) Quick command reference (developer return checklist)
+## 8) Validation workflow for new jobs
 
+**Before indexing a new job, ALWAYS validate coverage:**
+
+```bash
+# Using the ohmni CLI (recommended - idiot proof!)
+ohmni validate YourJobName
+
+# Examples:
+ohmni validate HospitalProject2024
+ohmni validate SchoolRenovation2024
+ohmni validate ElecShuffleTest
+```
+
+**Or run directly:**
+```bash
+python3 tools/schedule_postpass/check_all_coverage.py /path/to/job/processed
+```
+
+**What validation does:**
+- Scans all `*_structured.json` files recursively
+- Checks that all schedule items are being converted to facts
+- Reports any missing items with specific counts
+- Exits with error code if issues found (useful for automation)
+
+**What you'll see:**
+- ✅ **All files passed** → Safe to proceed with `ohmni search YourJobName`
+- ⚠️ **Issues found** → **DO NOT INDEX** until fixed! See troubleshooting below.
+
+**Quick troubleshooting when validation fails:**
+
+1. **Identify the missing schedule type** from the error message
+   - Example: `"Mechanical: 30 facts < 35 items (MISSING 5)"`
+2. **Inspect the specific file** to see the data structure:
+   ```bash
+   python3 tools/schedule_postpass/check_coverage.py \
+     /Users/collin/Desktop/YourJobName/processed/Mechanical/m6-01/M6.01_structured.json
+   ```
+3. **Check the fallback iterator** in `tools/schedule_postpass/fallbacks/`:
+   - Electrical → `electrical.py`
+   - Mechanical → `mechanical.py`
+   - Plumbing → `plumbing.py`
+   - Architectural → `architectural.py`
+4. **Add support** following the pattern in section 7 (usually <10 lines of code)
+5. **Re-validate** to confirm the fix:
+   ```bash
+   ohmni validate YourJobName
+   ```
+
+**Common patterns to add:**
+- New schedule key names (e.g., `PUMP_SCHEDULE`, `SHOCK_ARRESTORS`)
+- Nested list keys (e.g., `louvers`, `pumps`, `valves`)
+- Field name aliases (e.g., `MARK` vs `tag` vs `fixture_id`)
+
+**See `QUICK_START.md` for detailed examples and copy-paste patterns!**
+
+## 9) Quick command reference (using ohmni CLI)
+
+**Standard workflow for new jobs:**
+```bash
+# 1. Process drawings
+ohmni process YourJobName
+
+# 2. Validate coverage (CRITICAL - always do this!)
+ohmni validate YourJobName
+
+# 3. If validation passed, index to Azure Search
+ohmni search YourJobName
+```
+
+**For template-only updates:**
+```bash
+# If foreman edited room templates and you just want to refresh those:
+ohmni search-templates YourJobName
+```
+
+**Legacy make commands (still work, but ohmni CLI is preferred):**
 ```bash
 # 1. Regenerate payloads from a specific processed folder
 make index-pack SOURCE=/Users/<you>/<job>/processed \

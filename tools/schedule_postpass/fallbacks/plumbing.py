@@ -75,3 +75,59 @@ def iter_plumb_rows(raw_json: Dict[str, Any]) -> Generator[Dict[str, Any], None,
                         row["tag"] = heater_id
                 yield row
 
+    # Check for pump schedule
+    pumps = ci_get(plm, "PUMP_SCHEDULE") or ci_get(plm, "pump_schedule")
+    if isinstance(pumps, list):
+        for item in pumps:
+            if isinstance(item, dict):
+                row = dict(item)
+                if "tag" not in row:
+                    pump_id = (
+                        ci_get(row, "MARK")
+                        or ci_get(row, "mark")
+                        or ci_get(row, "pump_id")
+                        or ci_get(row, "id")
+                    )
+                    if pump_id:
+                        row["tag"] = pump_id
+                yield row
+
+    # Check for shock arrestors
+    shock_arrestors = ci_get(plm, "SHOCK_ARRESTORS") or ci_get(plm, "shock_arrestors")
+    if isinstance(shock_arrestors, list):
+        for item in shock_arrestors:
+            if isinstance(item, dict):
+                row = dict(item)
+                if "tag" not in row:
+                    sa_id = (
+                        ci_get(row, "MARK")
+                        or ci_get(row, "mark")
+                        or ci_get(row, "id")
+                    )
+                    if sa_id:
+                        row["tag"] = sa_id
+                yield row
+
+    # Check for thermostatic mixing valve schedule
+    tmv = (
+        ci_get(plm, "THERMOSTATIC_MIXING_VALVE_SCHEDULE")
+        or ci_get(plm, "thermostatic_mixing_valve_schedule")
+    )
+    if isinstance(tmv, list):
+        for item in tmv:
+            if isinstance(item, dict):
+                row = dict(item)
+                # These may not have a MARK field, so use description or model number
+                if "tag" not in row:
+                    tmv_id = (
+                        ci_get(row, "MARK")
+                        or ci_get(row, "mark")
+                        or ci_get(row, "MODEL_NUMBER")
+                        or ci_get(row, "model_number")
+                        or ci_get(row, "VALVE_ASSEMBLY_DESIGNATION_DESCRIPTION")
+                        or ci_get(row, "id")
+                    )
+                    if tmv_id:
+                        row["tag"] = str(tmv_id)[:50]  # Truncate long descriptions
+                yield row
+

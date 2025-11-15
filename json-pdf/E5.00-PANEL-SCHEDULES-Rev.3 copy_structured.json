@@ -5,40 +5,36 @@
     "date": "08/15/2024",
     "revision": "TM",
     "project_name": "ELECTRIC SHUFFLE",
-    "job_no": "30J7925",
-    "license_expires": "11/30/2025",
+    "job_number": "30J7925",
+    "license_expiration": "11/30/2025",
     "project_address": "448 N. LA SALLE DR., SUITE# CHICAGO, IL 60654",
-    "designer_contact": {
+    "designer_contacts": {
       "Electrical": {
         "company": "FSG Electrical",
-        "address": "2525 Walnut Hill Ln. Suite#100, Dallas TX 75229",
+        "address": "2525 Walnut Hill Ln. Suite#100 Dallas TX 75229",
         "contact": "Kevin Altimier - kevin.altimier@fsgi.com"
       },
       "Mechanical and Plumbing": {
         "company": "AOS Engineering",
-        "address": "5020 Tennyson Parkway, Plano TX 75024",
+        "address": "5020 Tennyson Parkway Plano TX 75024",
         "contact": "Brian Gast - bgast@aos-engineering.com"
       },
       "Structural": {
         "company": "Wallace Deisgn Collective",
-        "address": "123 N. Martin Luther King Jr. Blvd., Tulsa OK 74103",
+        "address": "123 N. Martin Luther King Jr. Blvd. Tulsa OK 74103",
         "contact": "Michael Lancey - michael.lancy@wallace.design"
       },
       "Interior Design": {
         "company": "ARCO Murray Engineering",
-        "address": "3110 Woodcreek Dr., Downers Grove IL 60515",
+        "address": "3110 Woodcreek Dr. Downers Grove IL 60515",
         "contact": "Jackie Arcy - jarcy@arcomurray.com"
       }
     },
-    "project_office_address": "3110 Woodcreek Dr., Downers Grove, IL 60515",
-    "project_office_phone": "(331) 251-2726",
-    "project_office_website": "www.arcomurray.com",
-    "client": "LOUIS VANDELOECHT",
-    "client_address": "229 Greenbrier Estates Dr., St. Louis, MO 63122",
-    "client_phone": "(314) 822-5191",
-    "sheet_number": "E5.00",
-    "job_number": "30J7925",
-    "project_status_dates": [
+    "drawing_notes": [
+      "If this line is not exactly 1\" long, then this sheet has been scaled.",
+      "If the Colors below the line are not Red | Green | Blue, then this sheet was not printed in color."
+    ],
+    "revision_history": [
       {
         "description": "75% SET",
         "date": "10/06/2023"
@@ -52,19 +48,22 @@
         "date": "03/08/2024"
       },
       {
-        "description": "PERMIT SET",
+        "description": "0 PERMIT SET",
         "date": "04/17/2024"
       },
       {
-        "description": "IFC",
+        "description": "3 IFC",
         "date": "08/15/2024"
       }
-    ]
+    ],
+    "sheet_number": "E5.00",
+    "project_name_source": "derived_from_job_no",
+    "job_no": "30J7925"
   },
   "ELECTRICAL": {
     "panels": [
       {
-        "panel_name": "K1",
+        "panel_id": "K1",
         "enclosure_info": {
           "info": "* - GFCI CIRCUIT BREAKER",
           "mounting": null,
@@ -77,69 +76,56 @@
           "volts": "120/208 Wye",
           "aic_rating": "14K"
         },
-        "total_estimated_demand_amps": 216,
-        "total_connected_amps": 235,
-        "total_estimated_demand_va": 77838,
-        "total_connected_load_va": 84604,
-        "load_classification_summary": {
-          "Receptacle": {
-            "connected_load_va": 24120,
-            "demand_factor_percent": 70.73,
-            "estimated_demand_va": 17060
+        "total_estimated_demand_amps": 168,
+        "total_connected_amps": 229,
+        "loads": {
+          "motor": {
+            "connected_load_va": 3386,
+            "demand_factor_percent": 125.0,
+            "estimated_demand_va": 4233
           },
-          "Power": {
-            "connected_load_va": 7678,
-            "demand_factor_percent": 100,
-            "estimated_demand_va": 7678
+          "kitchen_equipment_non_dwelling_unit": {
+            "connected_load_va": 64990,
+            "demand_factor_percent": 65.0,
+            "estimated_demand_va": 42244
           },
-          "Motor": {
-            "connected_load_va": 5976,
-            "demand_factor_percent": 104.92,
-            "estimated_demand_va": 6270
-          },
-          "Lighting": {
-            "connected_load_va": 13651,
-            "demand_factor_percent": 100,
-            "estimated_demand_va": 13651
-          },
-          "HVAC": {
-            "connected_load_va": 30825,
-            "demand_factor_percent": 100,
-            "estimated_demand_va": 30825
-          },
-          "Exterior - Lighting": {
-            "connected_load_va": 2355,
-            "demand_factor_percent": 100,
-            "estimated_demand_va": 2355
+          "hvac": {
+            "connected_load_va": 13977,
+            "demand_factor_percent": 100.0,
+            "estimated_demand_va": 13977
           }
         },
+        "total_connected_load_va": 82353,
+        "total_estimated_demand_va": 60453,
         "panel_totals": {
-          "total_amps": {
-            "A": 287,
-            "B": 267,
-            "C": 175
-          },
-          "total_load_va": {
-            "A": 33013,
-            "B": 30590,
-            "C": 21002
-          }
+          "total_amps": [
+            239,
+            248,
+            208
+          ],
+          "total_load_va": [
+            28152,
+            29224,
+            24977
+          ]
         },
         "circuits": [
           {
-            "circuit_number": 1,
-            "load_classification": "Kitchen...",
-            "load_name": "(3) E-01* Kitchen 118",
+            "ckt": 1,
+            "load_name": "(4)E-01* Bar 107",
             "trip": "20 A",
             "poles": 1,
+            "load_classification": "Kitchen 118",
+            "connected_load_va": 540,
+            "estimated_demand_va": 720,
             "phase_loads": {
-              "A": "540 VA",
-              "B": "720 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 2,
-              "load_classification": "Kitchen...",
+              "circuit_number": null,
+              "load_classification": null,
               "load_name": null,
               "trip": null,
               "poles": null,
@@ -148,261 +134,267 @@
                 "B": null,
                 "C": null
               }
-            }
-          },
-          {
-            "circuit_number": 3,
-            "load_classification": "Kitchen...",
-            "load_name": "(3) E-01* Kitchen 118",
-            "trip": "20 A",
-            "poles": 1,
-            "phase_loads": {
-              "A": "540 VA",
-              "B": "720 VA",
-              "C": null
             },
-            "right_side": {
-              "circuit_number": 4,
-              "load_classification": "Kitchen...",
-              "load_name": "(4)E-01* Bar 107",
-              "trip": "20 A",
-              "poles": 1,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
+            "circuit_number": 1
           },
           {
-            "circuit_number": 5,
-            "load_classification": "Kitchen...",
-            "load_name": "(3) E-01* Kitchen 118",
+            "ckt": 3,
+            "load_name": "(2)E-01 & (1)E-02* Bar 107",
             "trip": "20 A",
             "poles": 1,
+            "load_classification": "Kitchen 118",
+            "connected_load_va": 540,
+            "estimated_demand_va": 540,
             "phase_loads": {
-              "A": "540 VA",
-              "B": "540 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 6,
-              "load_classification": "Kitchen...",
-              "load_name": "(2)E-01 & (1)E-02* Bar 107",
-              "trip": "20 A",
-              "poles": 1,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 7,
-            "load_classification": "Kitchen...",
-            "load_name": "(2) E-01* Kitchen 118",
-            "trip": "20 A",
-            "poles": 1,
-            "phase_loads": {
-              "A": "360 VA",
-              "B": "576 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 8,
-              "load_classification": "Kitchen...",
-              "load_name": "E-143 & E-145*",
-              "trip": "15 A",
-              "poles": 1,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 9,
-            "load_classification": "Kitchen...",
-            "load_name": "(2) E-01* Kitchen 118",
-            "trip": "20 A",
-            "poles": 1,
-            "phase_loads": {
-              "A": "360 VA",
+              "A": null,
               "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 10,
-              "load_classification": "Space",
+              "circuit_number": null,
+              "load_classification": null,
               "load_name": null,
               "trip": null,
-              "poles": 1,
+              "poles": null,
               "phase_loads": {
                 "A": null,
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 3
           },
           {
-            "circuit_number": 11,
-            "load_classification": "Kitchen...",
-            "load_name": "(2) E-01 & (1) E-03*",
-            "trip": "20 A",
+            "ckt": 5,
+            "load_name": "E-143 & E-145*",
+            "trip": "15 A",
             "poles": 1,
+            "load_classification": "Kitchen 118",
+            "connected_load_va": 360,
+            "estimated_demand_va": 576,
             "phase_loads": {
-              "A": "540 VA",
+              "A": null,
               "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 12,
-              "load_classification": "Space",
+              "circuit_number": null,
+              "load_classification": null,
               "load_name": null,
               "trip": null,
-              "poles": 1,
+              "poles": null,
               "phase_loads": {
                 "A": null,
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 5
           },
           {
-            "circuit_number": 13,
-            "load_classification": "Kitchen...",
-            "load_name": "E-101A",
+            "ckt": 7,
+            "load_name": "Space",
             "trip": "20 A",
             "poles": 1,
+            "load_classification": "Kitchen 118",
+            "connected_load_va": 360,
+            "estimated_demand_va": null,
             "phase_loads": {
-              "A": "1800 VA",
+              "A": null,
               "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 14,
-              "load_classification": "Space",
+              "circuit_number": null,
+              "load_classification": null,
               "load_name": null,
               "trip": null,
-              "poles": 1,
+              "poles": null,
               "phase_loads": {
                 "A": null,
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 7
           },
           {
-            "circuit_number": 15,
-            "load_classification": "Kitchen...",
-            "load_name": "E-101A",
+            "ckt": 9,
+            "load_name": "Space",
             "trip": "20 A",
             "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 540,
+            "estimated_demand_va": null,
             "phase_loads": {
-              "A": "1800 VA",
-              "B": "0 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 16,
-              "load_classification": "Spare",
+              "circuit_number": null,
+              "load_classification": null,
               "load_name": null,
-              "trip": "20 A",
-              "poles": 1,
+              "trip": null,
+              "poles": null,
               "phase_loads": {
                 "A": null,
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 9
           },
           {
-            "circuit_number": 17,
-            "load_classification": "Kitchen...",
-            "load_name": "(2) E-101B",
+            "ckt": 11,
+            "load_name": "Spare",
             "trip": "20 A",
             "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 1800,
+            "estimated_demand_va": null,
             "phase_loads": {
-              "A": "1800 VA",
-              "B": "1800 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 18,
-              "load_classification": "Kitchen...",
-              "load_name": "E-301A",
-              "trip": "20 A",
-              "poles": 1,
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
               "phase_loads": {
                 "A": null,
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 11
           },
           {
-            "circuit_number": 19,
+            "ckt": 13,
+            "load_name": "E-301A",
+            "trip": "20 A",
+            "poles": 1,
             "load_classification": "Kitchen...",
+            "connected_load_va": 1800,
+            "estimated_demand_va": 0,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 13
+          },
+          {
+            "ckt": 15,
+            "load_name": "E-301B",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 1800,
+            "estimated_demand_va": 1800,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 15
+          },
+          {
+            "ckt": 17,
             "load_name": "E-102",
             "trip": "15 A",
             "poles": 2,
-            "phase_loads": {
-              "A": "770 VA",
-              "B": "1800 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 20,
-              "load_classification": "Kitchen...",
-              "load_name": "E-301B",
-              "trip": "20 A",
-              "poles": 1,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 21,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "770 VA",
-              "B": "593 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 22,
-              "load_classification": "Kitchen...",
-              "load_name": "E-302",
-              "trip": "15 A",
-              "poles": 2,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 23,
             "load_classification": "Kitchen...",
+            "connected_load_va": 770,
+            "estimated_demand_va": 1800,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 17
+          },
+          {
+            "ckt": 19,
+            "load_name": "E-302",
+            "trip": "15 A",
+            "poles": 2,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 770,
+            "estimated_demand_va": 593,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 19
+          },
+          {
+            "ckt": 21,
             "load_name": "E-103",
             "trip": "15 A",
             "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 192,
+            "estimated_demand_va": 593,
             "phase_loads": {
-              "A": "192 VA",
-              "B": "593 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 24,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -412,69 +404,78 @@
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 21
           },
           {
-            "circuit_number": 25,
-            "load_classification": "Kitchen...",
+            "ckt": 23,
             "load_name": "E-104",
             "trip": "20 A",
             "poles": 2,
-            "phase_loads": {
-              "A": "1061 VA",
-              "B": "96 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 26,
-              "load_classification": "Kitchen...",
-              "load_name": "E-303",
-              "trip": "20 A",
-              "poles": 1,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 27,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "1061 VA",
-              "B": "1144 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 28,
-              "load_classification": "Kitchen...",
-              "load_name": "E-305",
-              "trip": "20 A",
-              "poles": 2,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 29,
             "load_classification": "Kitchen...",
+            "connected_load_va": 1061,
+            "estimated_demand_va": 96,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 23
+          },
+          {
+            "ckt": 25,
+            "load_name": "E-305",
+            "trip": "20 A",
+            "poles": 2,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 1061,
+            "estimated_demand_va": 1144,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 25
+          },
+          {
+            "ckt": 27,
             "load_name": "E-105",
             "trip": "15 A",
             "poles": 2,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 593,
+            "estimated_demand_va": 1144,
             "phase_loads": {
-              "A": "593 VA",
-              "B": "1144 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 30,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -484,45 +485,24 @@
                 "B": null,
                 "C": null
               }
-            }
-          },
-          {
-            "circuit_number": 31,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "593 VA",
-              "B": "1144 VA",
-              "C": null
             },
-            "right_side": {
-              "circuit_number": 32,
-              "load_classification": "Kitchen...",
-              "load_name": "E-305",
-              "trip": "20 A",
-              "poles": 2,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
+            "circuit_number": 27
           },
           {
-            "circuit_number": 33,
-            "load_classification": "Kitchen...",
-            "load_name": "E-115*",
+            "ckt": 29,
+            "load_name": "E-305",
             "trip": "20 A",
-            "poles": 1,
+            "poles": 2,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 593,
+            "estimated_demand_va": 1144,
             "phase_loads": {
-              "A": "2004 VA",
-              "B": "1144 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 34,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -532,525 +512,510 @@
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 29
           },
           {
-            "circuit_number": 35,
-            "load_classification": "Kitchen...",
+            "ckt": 31,
             "load_name": "E-115*",
             "trip": "20 A",
             "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 2004,
+            "estimated_demand_va": 1144,
             "phase_loads": {
-              "A": "2004 VA",
-              "B": "1920 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 36,
-              "load_classification": "Kitchen...",
-              "load_name": "E-407A*",
-              "trip": "20 A",
-              "poles": 1,
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
               "phase_loads": {
                 "A": null,
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 31
           },
           {
-            "circuit_number": 37,
+            "ckt": 33,
+            "load_name": "E-115*",
+            "trip": "20 A",
+            "poles": 1,
             "load_classification": "Kitchen...",
+            "connected_load_va": 2004,
+            "estimated_demand_va": 1920,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 33
+          },
+          {
+            "ckt": 35,
             "load_name": "E-116*",
             "trip": "15 A",
             "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 240,
+            "estimated_demand_va": 1920,
             "phase_loads": {
-              "A": "240 VA",
-              "B": "1920 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 38,
-              "load_classification": "Kitchen...",
-              "load_name": "E-407A*",
-              "trip": "20 A",
-              "poles": 1,
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
               "phase_loads": {
                 "A": null,
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 35
           },
           {
-            "circuit_number": 39,
-            "load_classification": "Kitchen...",
+            "ckt": 37,
             "load_name": "K1S**",
             "trip": "30 A",
             "poles": 3,
-            "phase_loads": {
-              "A": "2240 VA",
-              "B": "1800 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 40,
-              "load_classification": "Kitchen...",
-              "load_name": "(3) E-408*",
-              "trip": "20 A",
-              "poles": 1,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 41,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "1560 VA",
-              "B": "864 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 42,
-              "load_classification": null,
-              "load_name": null,
-              "trip": "20 A",
-              "poles": 1,
-              "phase_loads": {
-                "A": "(6) E-418*",
-                "B": "Kitchen...",
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 43,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "1792 VA",
-              "B": "0 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 44,
-              "load_classification": "Kitchen...",
-              "load_name": null,
-              "trip": "20 A",
-              "poles": 1,
-              "phase_loads": {
-                "A": "Spare",
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 45,
-            "load_classification": "Shunt Trip Space",
-            "load_name": null,
-            "trip": null,
-            "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 2240,
+            "estimated_demand_va": 1800,
             "phase_loads": {
               "A": null,
-              "B": "1380 VA",
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 46,
-              "load_classification": "Kitchen...",
-              "load_name": "E-601",
-              "trip": "20 A",
-              "poles": 1,
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
               "phase_loads": {
                 "A": null,
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 37
           },
           {
-            "circuit_number": 47,
+            "ckt": 40,
+            "load_name": "(6) E-418*",
+            "trip": "20 A",
+            "poles": 1,
             "load_classification": "Kitchen...",
+            "connected_load_va": 1560,
+            "estimated_demand_va": 864,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 40
+          },
+          {
+            "ckt": 41,
+            "load_name": "Spare",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "--",
+            "connected_load_va": 1792,
+            "estimated_demand_va": 0,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 41
+          },
+          {
+            "ckt": 43,
+            "load_name": "Shunt Trip Space",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": "--",
+            "estimated_demand_va": 1380,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 43
+          },
+          {
+            "ckt": 45,
             "load_name": "E-124A - Fire Supp System",
             "trip": "20 A",
             "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 1920,
+            "estimated_demand_va": 1380,
             "phase_loads": {
-              "A": "1920 VA",
-              "B": "1380 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 48,
-              "load_classification": "Kitchen...",
-              "load_name": "E-601",
-              "trip": "20 A",
-              "poles": 1,
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
               "phase_loads": {
                 "A": null,
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 45
           },
           {
-            "circuit_number": 49,
-            "load_classification": "Kitchen...",
+            "ckt": 47,
             "load_name": "E-125*",
             "trip": "15 A",
             "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 384,
+            "estimated_demand_va": 1380,
             "phase_loads": {
-              "A": "384 VA",
-              "B": "1380 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 50,
-              "load_classification": "Kitchen...",
-              "load_name": "E-601",
-              "trip": "20 A",
-              "poles": 1,
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
               "phase_loads": {
                 "A": null,
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 47
           },
           {
-            "circuit_number": 51,
-            "load_classification": "Kitchen...",
+            "ckt": 49,
             "load_name": "E-130*",
             "trip": "15 A",
             "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 1356,
+            "estimated_demand_va": 396,
             "phase_loads": {
-              "A": "1356 VA",
-              "B": "396 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 52,
-              "load_classification": "Kitchen...",
-              "load_name": "E-603",
-              "trip": "15 A",
-              "poles": 1,
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
               "phase_loads": {
                 "A": null,
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 49
           },
           {
-            "circuit_number": 53,
-            "load_classification": "Kitchen...",
+            "ckt": 51,
             "load_name": "E-131*",
             "trip": "20 A",
             "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 1500,
+            "estimated_demand_va": 1920,
             "phase_loads": {
-              "A": "1500 VA",
-              "B": "1920 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 54,
-              "load_classification": "Kitchen...",
-              "load_name": "E-610A*",
-              "trip": "20 A",
-              "poles": 1,
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
               "phase_loads": {
                 "A": null,
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 51
           },
           {
-            "circuit_number": 55,
-            "load_classification": "Kitchen...",
+            "ckt": 53,
             "load_name": "(2)E-132*",
             "trip": "20 A",
             "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 1440,
+            "estimated_demand_va": 156,
             "phase_loads": {
-              "A": "1440 VA",
-              "B": "156 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 56,
-              "load_classification": "Kitchen...",
-              "load_name": "E-610B",
-              "trip": "20 A",
-              "poles": 1,
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
               "phase_loads": {
                 "A": null,
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 53
           },
           {
-            "circuit_number": 57,
+            "ckt": 55,
+            "load_name": "E-611*",
+            "trip": "15 A",
+            "poles": 1,
             "load_classification": "Kitchen...",
+            "connected_load_va": 1310,
+            "estimated_demand_va": 516,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 55
+          },
+          {
+            "ckt": 58,
+            "load_name": "KEF-1",
+            "trip": "15 A",
+            "poles": 3,
+            "load_classification": "Motor",
+            "connected_load_va": 1310,
+            "estimated_demand_va": 1129,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 58
+          },
+          {
+            "ckt": 59,
             "load_name": "E-136",
             "trip": "20 A",
             "poles": 2,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 1310,
+            "estimated_demand_va": 1129,
             "phase_loads": {
-              "A": "1310 VA",
-              "B": "516 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 58,
-              "load_classification": "Kitchen...",
-              "load_name": "E-611*",
-              "trip": "15 A",
-              "poles": 1,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 59,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "1310 VA",
-              "B": "1129 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 60,
-              "load_classification": null,
-              "load_name": null,
-              "trip": "15 A",
-              "poles": 3,
-              "phase_loads": {
-                "A": "KEF-1",
-                "B": "Motor",
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 61,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "1310 VA",
-              "B": "1129 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 62,
-              "load_classification": "Kitchen...",
-              "load_name": "E-136",
-              "trip": "20 A",
-              "poles": 2,
-              "phase_loads": {
-                "A": "1310 VA",
-                "B": "1129 VA",
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 63,
-            "load_classification": null,
-            "load_name": null,
-            "trip": "20 A",
-            "poles": 1,
-            "phase_loads": {
-              "A": "Spare*",
+              "A": null,
               "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 64,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
               "poles": null,
               "phase_loads": {
-                "A": "1310 VA",
-                "B": "1129 VA",
+                "A": null,
+                "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 59
           },
           {
-            "circuit_number": 65,
-            "load_classification": null,
-            "load_name": null,
+            "ckt": 63,
+            "load_name": "E-137",
             "trip": "20 A",
-            "poles": 1,
+            "poles": 2,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 957,
+            "estimated_demand_va": 0,
             "phase_loads": {
-              "A": "Spare*",
+              "A": null,
               "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 66,
-              "load_classification": "Kitchen...",
-              "load_name": "E-137",
-              "trip": "20 A",
-              "poles": 2,
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
               "phase_loads": {
-                "A": "957 VA",
-                "B": "0 VA",
+                "A": null,
+                "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 63
           },
           {
-            "circuit_number": 67,
-            "load_classification": null,
-            "load_name": null,
+            "ckt": 66,
+            "load_name": "Spare*",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 957,
+            "estimated_demand_va": 0,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 66
+          },
+          {
+            "ckt": 67,
+            "load_name": "E-141A*",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 1920,
+            "estimated_demand_va": 1141,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 67
+          },
+          {
+            "ckt": 68,
+            "load_name": "MAU-1",
             "trip": "20 A",
             "poles": 3,
+            "load_classification": "HVAC",
+            "connected_load_va": "--",
+            "estimated_demand_va": 957,
             "phase_loads": {
-              "A": "20 A",
-              "B": "MAU-1",
-              "C": "HVAC"
-            },
-            "right_side": {
-              "circuit_number": 68,
-              "load_classification": null,
-              "load_name": null,
-              "trip": null,
-              "poles": null,
-              "phase_loads": {
-                "A": "957 VA",
-                "B": "0 VA",
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 69,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "1141 VA",
+              "A": null,
               "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 70,
-              "load_classification": "Kitchen...",
-              "load_name": "E-141A*",
-              "trip": "20 A",
-              "poles": 1,
-              "phase_loads": {
-                "A": "1920 VA",
-                "B": "1141 VA",
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 71,
-            "load_classification": "Spare",
-            "load_name": null,
-            "trip": "20 A",
-            "poles": 1,
-            "phase_loads": {
-              "A": "1141 VA",
-              "B": null,
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 72,
-              "load_classification": "Kitchen...",
-              "load_name": "E-142*",
-              "trip": "15 A",
-              "poles": 1,
-              "phase_loads": {
-                "A": "360 VA",
-                "B": "1141 VA",
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 73,
-            "load_classification": "Spare",
-            "load_name": null,
-            "trip": "20 A",
-            "poles": 1,
-            "phase_loads": {
-              "A": "1429 VA",
-              "B": null,
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 74,
-              "load_classification": null,
-              "load_name": null,
-              "trip": null,
-              "poles": null,
-              "phase_loads": {
-                "A": "1141 VA",
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 75,
-            "load_classification": "Spare",
-            "load_name": null,
-            "trip": "20 A",
-            "poles": 1,
-            "phase_loads": {
-              "A": "1429 VA",
-              "B": null,
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 76,
-              "load_classification": null,
-              "load_name": null,
-              "trip": "20 A",
-              "poles": 3,
-              "phase_loads": {
-                "A": "MAU CONDENSER #1",
-                "B": "HVAC",
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 77,
-            "load_classification": "Spare",
-            "load_name": null,
-            "trip": "20 A",
-            "poles": 1,
-            "phase_loads": {
-              "A": "1429 VA",
-              "B": null,
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 78,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -1060,45 +1025,51 @@
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 68
           },
           {
-            "circuit_number": 79,
-            "load_classification": "Spare",
-            "load_name": null,
+            "ckt": 74,
+            "load_name": "E-142*",
+            "trip": "15 A",
+            "poles": 1,
+            "load_classification": "Kitchen...",
+            "connected_load_va": 360,
+            "estimated_demand_va": 1141,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 74
+          },
+          {
+            "ckt": 79,
+            "load_name": "MAU CONDENSER #2",
             "trip": "30 A",
             "poles": 3,
+            "load_classification": "HVAC",
+            "connected_load_va": "--",
+            "estimated_demand_va": null,
             "phase_loads": {
-              "A": "2089 VA",
+              "A": null,
               "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 80,
-              "load_classification": "MAU CONDENSER #2",
-              "load_name": "HVAC",
-              "trip": null,
-              "poles": null,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 81,
-            "load_classification": "Spare",
-            "load_name": null,
-            "trip": "20 A",
-            "poles": 1,
-            "phase_loads": {
-              "A": "0 VA",
-              "B": null,
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 82,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -1108,21 +1079,24 @@
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 79
           },
           {
-            "circuit_number": 83,
-            "load_classification": "Spare",
-            "load_name": null,
+            "ckt": 80,
+            "load_name": "MAU CONDENSER #1",
             "trip": "20 A",
-            "poles": 1,
+            "poles": 3,
+            "load_classification": "HVAC",
+            "connected_load_va": "--",
+            "estimated_demand_va": null,
             "phase_loads": {
-              "A": "0 VA",
+              "A": null,
               "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 84,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -1132,12 +1106,125 @@
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 80
+          },
+          {
+            "ckt": 81,
+            "load_name": "--",
+            "trip": "--",
+            "poles": 1,
+            "load_classification": "Space",
+            "connected_load_va": "--",
+            "estimated_demand_va": 2089,
+            "additional_info": null,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 81
+          },
+          {
+            "ckt": 82,
+            "load_name": "--",
+            "trip": "--",
+            "poles": "--",
+            "load_classification": "Space",
+            "connected_load_va": "--",
+            "estimated_demand_va": 2089,
+            "additional_info": null,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 82
+          },
+          {
+            "ckt": 83,
+            "load_name": "Slushie Machine*",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Motor",
+            "connected_load_va": 1411,
+            "estimated_demand_va": 2089,
+            "additional_info": null,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 83
+          },
+          {
+            "ckt": 84,
+            "load_name": "--",
+            "trip": "--",
+            "poles": "--",
+            "load_classification": "Space",
+            "connected_load_va": "--",
+            "estimated_demand_va": 2089,
+            "additional_info": null,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 84
           }
         ]
       },
       {
-        "panel_name": "L1",
+        "panel_id": "L1",
         "enclosure_info": {
           "info": "*GFCI BREAKER",
           "mounting": null,
@@ -1150,73 +1237,70 @@
           "volts": "120/208 Wye",
           "aic_rating": "14K"
         },
-        "total_estimated_demand_amps": 437,
-        "total_connected_amps": 493,
-        "total_estimated_demand_va": 363666,
-        "total_connected_load_va": 409911,
-        "load_classification_summary": {
-          "Exterior - Lighting": {
-            "connected_load_va": 2355,
-            "demand_factor_percent": 100,
-            "estimated_demand_va": 2355
-          },
-          "Receptacle": {
+        "total_estimated_demand_amps": 216,
+        "total_connected_amps": 235,
+        "loads": {
+          "receptacle": {
             "connected_load_va": 24120,
             "demand_factor_percent": 70.73,
             "estimated_demand_va": 17060
           },
-          "Power": {
-            "connected_load_va": 89178,
-            "demand_factor_percent": 100,
-            "estimated_demand_va": 89178
+          "power": {
+            "connected_load_va": 7678,
+            "demand_factor_percent": 100.0,
+            "estimated_demand_va": 7678
           },
-          "Motor": {
-            "connected_load_va": 12189,
-            "demand_factor_percent": 106.94,
-            "estimated_demand_va": 13036
+          "motor": {
+            "connected_load_va": 5976,
+            "demand_factor_percent": 104.92,
+            "estimated_demand_va": 6270
           },
-          "Lighting": {
+          "lighting": {
             "connected_load_va": 13651,
-            "demand_factor_percent": 100,
+            "demand_factor_percent": 100.0,
             "estimated_demand_va": 13651
           },
-          "Kitchen Equipment - Non-Dwelling Unit": {
-            "connected_load_va": 114374,
-            "demand_factor_percent": 65,
-            "estimated_demand_va": 74343
+          "hvac": {
+            "connected_load_va": 30825,
+            "demand_factor_percent": 100.0,
+            "estimated_demand_va": 30825
           },
-          "HVAC": {
-            "connected_load_va": 154044,
-            "demand_factor_percent": 100,
-            "estimated_demand_va": 154044
+          "exterior_lighting": {
+            "connected_load_va": 2355,
+            "demand_factor_percent": 100.0,
+            "estimated_demand_va": 2355
           }
         },
+        "total_connected_load_va": 84604,
+        "total_estimated_demand_va": 77838,
         "panel_totals": {
-          "total_amps": {
-            "A": 521,
-            "B": 516,
-            "C": 458
-          },
-          "total_load_va": {
-            "A": 142149,
-            "B": 140798,
-            "C": 126963
-          }
+          "total_amps": [
+            287,
+            267,
+            175
+          ],
+          "total_load_va": [
+            33013,
+            30590,
+            21002
+          ]
         },
         "circuits": [
           {
-            "circuit_number": 1,
-            "load_classification": "Power",
-            "load_name": "WH-1",
-            "trip": "70 A",
-            "poles": 3,
+            "ckt": 1,
+            "load_name": "Game#1 Table,TV, Tablet",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 1280,
+            "estimated_demand_va": 1080,
             "phase_loads": {
-              "A": "13500 VA",
-              "B": "13500 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 2,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -1226,45 +1310,24 @@
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 1
           },
           {
-            "circuit_number": 3,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
+            "ckt": 3,
+            "load_name": "Game#3 Table,TV, Tablet",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 1030,
+            "estimated_demand_va": 1280,
             "phase_loads": {
-              "A": "13500 VA",
-              "B": "13500 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 4,
-              "load_classification": "Power",
-              "load_name": "WH-1",
-              "trip": "70 A",
-              "poles": 3,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 5,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "13500 VA",
-              "B": "13500 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 6,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -1274,21 +1337,24 @@
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 3
           },
           {
-            "circuit_number": 7,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
+            "ckt": 5,
+            "load_name": "Game#5 Table,TV, Tablet",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 1030,
+            "estimated_demand_va": 1280,
             "phase_loads": {
-              "A": "13500 VA",
-              "B": "13500 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 8,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -1298,45 +1364,24 @@
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 5
           },
           {
-            "circuit_number": 9,
-            "load_classification": "HVAC",
-            "load_name": "CU-1.2",
-            "trip": "50 A",
-            "poles": 3,
+            "ckt": 7,
+            "load_name": "Game#7 Table,TV, Tablet",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 1280,
+            "estimated_demand_va": 1280,
             "phase_loads": {
-              "A": "11473 VA",
-              "B": "11473 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 10,
-              "load_classification": "HVAC",
-              "load_name": "CU-1.4",
-              "trip": "50 A",
-              "poles": 3,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 11,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "11473 VA",
-              "B": "11473 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 12,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -1346,21 +1391,24 @@
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 7
           },
           {
-            "circuit_number": 13,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
+            "ckt": 9,
+            "load_name": "Game#9 Table,TV, Tablet",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Lighting",
+            "connected_load_va": 1030,
+            "estimated_demand_va": 1460,
             "phase_loads": {
-              "A": "11473 VA",
-              "B": "11473 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 14,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -1370,45 +1418,24 @@
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 9
           },
           {
-            "circuit_number": 15,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
+            "ckt": 11,
+            "load_name": "Game#11 Table,TV, Tablet",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Lighting",
+            "connected_load_va": 1460,
+            "estimated_demand_va": 1354,
             "phase_loads": {
-              "A": "11473 VA",
-              "B": "11473 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 16,
-              "load_classification": "HVAC",
-              "load_name": "CU-1.3",
-              "trip": "50 A",
-              "poles": 3,
-              "phase_loads": {
-                "A": "20 A",
-                "B": "MV-400 (Surge Protector)",
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 17,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "11473 VA",
-              "B": "167 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 18,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -1418,285 +1445,753 @@
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 11
           },
           {
-            "circuit_number": 19,
-            "load_classification": "Motor",
-            "load_name": "EF-2",
+            "ckt": 13,
+            "load_name": "Game 103 Ltg",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Lighting",
+            "connected_load_va": 883,
+            "estimated_demand_va": 1550,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 13
+          },
+          {
+            "ckt": 15,
+            "load_name": "Game 104 Ltg",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Lighting",
+            "connected_load_va": 834,
+            "estimated_demand_va": 0,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 15
+          },
+          {
+            "ckt": 17,
+            "load_name": "Rm 101,102,108,109 Ltg",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Lighting",
+            "connected_load_va": 818,
+            "estimated_demand_va": 740,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 17
+          },
+          {
+            "ckt": 19,
+            "load_name": "Bar/Glass-Wash & HUB",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 973,
+            "estimated_demand_va": 550,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 19
+          },
+          {
+            "ckt": 21,
+            "load_name": "(2) Leaderboard Pwr",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Lighting",
+            "connected_load_va": 1000,
+            "estimated_demand_va": 1335,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 21
+          },
+          {
+            "ckt": 23,
+            "load_name": "Puckometer Pwr",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 180,
+            "estimated_demand_va": 1200,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 23
+          },
+          {
+            "ckt": 25,
+            "load_name": "Interior Signage",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Lighting",
+            "connected_load_va": 1400,
+            "estimated_demand_va": 1200,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 25
+          },
+          {
+            "ckt": 27,
+            "load_name": "DJ & Subwoofer Pwr",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 790,
+            "estimated_demand_va": 360,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 27
+          },
+          {
+            "ckt": 29,
+            "load_name": "Bar USB Rcpts & TVs",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 1040,
+            "estimated_demand_va": 900,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 29
+          },
+          {
+            "ckt": 31,
+            "load_name": "IT Rm 116 UPS L5-30R",
+            "trip": "30 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 2700,
+            "estimated_demand_va": 360,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 31
+          },
+          {
+            "ckt": 33,
+            "load_name": "IT Rm 116 Rcpt (IT Equip.)",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 1800,
+            "estimated_demand_va": 1470,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 33
+          },
+          {
+            "ckt": 35,
+            "load_name": "IT Rm 116 Rcpt (IT Equip.)",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 1800,
+            "estimated_demand_va": 946,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 35
+          },
+          {
+            "ckt": 37,
+            "load_name": "IT Rm 116 Rcpt (IT Equip.)",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 1800,
+            "estimated_demand_va": 946,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 37
+          },
+          {
+            "ckt": 39,
+            "load_name": "IT Rm 116 Rcpt (IT Equip.)",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 1800,
+            "estimated_demand_va": 655,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 39
+          },
+          {
+            "ckt": 41,
+            "load_name": "EF-1",
             "trip": "15 A",
+            "poles": 1,
+            "load_classification": "Motor",
+            "connected_load_va": 1176,
+            "estimated_demand_va": 655,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 41
+          },
+          {
+            "ckt": 43,
+            "load_name": "CP Pump",
+            "trip": "15 A",
+            "poles": 1,
+            "load_classification": "HVAC",
+            "connected_load_va": 528,
+            "estimated_demand_va": 676,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 43
+          },
+          {
+            "ckt": 45,
+            "load_name": "Turbine Light Motor",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Power",
+            "connected_load_va": 500,
+            "estimated_demand_va": 676,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 45
+          },
+          {
+            "ckt": 47,
+            "load_name": "Women's RR Hand Dryer",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Motor",
+            "connected_load_va": 1000,
+            "estimated_demand_va": 676,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 47
+          },
+          {
+            "ckt": 49,
+            "load_name": "Women's RR Hand Dryer",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Motor",
+            "connected_load_va": 1000,
+            "estimated_demand_va": 676,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 49
+          },
+          {
+            "ckt": 51,
+            "load_name": "Men's RR Hand Dryer",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Motor",
+            "connected_load_va": 1000,
+            "estimated_demand_va": 395,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 51
+          },
+          {
+            "ckt": 53,
+            "load_name": "Men's RR Hand Dryer",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Motor",
+            "connected_load_va": 1000,
+            "estimated_demand_va": 395,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 53
+          },
+          {
+            "ckt": 55,
+            "load_name": "Mech. GFI Rcpt.",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 180,
+            "estimated_demand_va": 676,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 55
+          },
+          {
+            "ckt": 57,
+            "load_name": "Bookshelf Rcpts",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 720,
+            "estimated_demand_va": 676,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 57
+          },
+          {
+            "ckt": 59,
+            "load_name": "Pergola Signage",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Lighting",
+            "connected_load_va": 650,
+            "estimated_demand_va": 676,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 59
+          },
+          {
+            "ckt": 61,
+            "load_name": "Bar Bulkhead Matrix...",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Receptacle",
+            "connected_load_va": 1200,
+            "estimated_demand_va": 676,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 61
+          },
+          {
+            "ckt": 63,
+            "load_name": "DJ Neon Signage",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Lighting",
+            "connected_load_va": 900,
+            "estimated_demand_va": 759,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 63
+          },
+          {
+            "ckt": 65,
+            "load_name": "LV Control Panels w/ lights",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Lighting",
+            "connected_load_va": 800,
+            "estimated_demand_va": 759,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 65
+          },
+          {
+            "ckt": 67,
+            "load_name": "MV-200",
+            "trip": "20 A",
             "poles": 3,
+            "load_classification": "HVAC",
+            "connected_load_va": 167,
+            "estimated_demand_va": 9953,
             "phase_loads": {
-              "A": "942 VA",
-              "B": "8231 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 20,
-              "load_classification": "Kitchen...",
-              "load_name": null,
-              "trip": null,
-              "poles": null,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 21,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "11473 VA",
-              "B": "167 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 22,
-              "load_classification": null,
-              "load_name": null,
-              "trip": null,
-              "poles": null,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 23,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "942 VA",
-              "B": "8231 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 24,
-              "load_classification": null,
-              "load_name": null,
-              "trip": null,
-              "poles": null,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 25,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "942 VA",
-              "B": "8231 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 26,
-              "load_classification": "Kitchen...",
-              "load_name": null,
-              "trip": null,
-              "poles": null,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 27,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "1995 VA",
-              "B": "8231 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 28,
-              "load_classification": "HVAC",
-              "load_name": "MAU-2",
-              "trip": "15 A",
-              "poles": 3,
-              "phase_loads": {
-                "A": "40 A",
-                "B": "E-419 (Glass Washer)",
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 29,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "1995 VA",
-              "B": "8231 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 30,
-              "load_classification": null,
-              "load_name": null,
-              "trip": null,
-              "poles": null,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 31,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": 1,
-            "phase_loads": {
-              "A": "Space",
+              "A": null,
               "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 32,
-              "load_classification": null,
-              "load_name": null,
-              "trip": null,
-              "poles": 1,
-              "phase_loads": {
-                "A": "Space",
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 33,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": 1,
-            "phase_loads": {
-              "A": "Space",
-              "B": null,
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 34,
-              "load_classification": null,
-              "load_name": null,
-              "trip": null,
-              "poles": 1,
-              "phase_loads": {
-                "A": "Space",
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 35,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": 1,
-            "phase_loads": {
-              "A": "Space",
-              "B": null,
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 36,
-              "load_classification": null,
-              "load_name": null,
-              "trip": null,
-              "poles": 1,
-              "phase_loads": {
-                "A": "Space",
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 37,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": 1,
-            "phase_loads": {
-              "A": "Space",
-              "B": null,
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 38,
-              "load_classification": null,
-              "load_name": null,
-              "trip": null,
-              "poles": 1,
-              "phase_loads": {
-                "A": "Space",
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 39,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "29224 VA",
-              "B": "30590 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 40,
-              "load_classification": "HVAC; Moto...",
-              "load_name": "TKL",
-              "trip": "225 A",
-              "poles": 3,
-              "phase_loads": {
-                "A": "28152 VA",
-                "B": "33013 VA",
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 41,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "24977 VA",
-              "B": "21002 VA",
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 42,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -1706,12 +2201,229 @@
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 67
+          },
+          {
+            "ckt": 69,
+            "load_name": "--",
+            "trip": "--",
+            "poles": "--",
+            "load_classification": "Power",
+            "connected_load_va": 167,
+            "estimated_demand_va": 9953,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 69
+          },
+          {
+            "ckt": 71,
+            "load_name": "EF-3",
+            "trip": "15 A",
+            "poles": 1,
+            "load_classification": "Motor",
+            "connected_load_va": 167,
+            "estimated_demand_va": 300,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 71
+          },
+          {
+            "ckt": 73,
+            "load_name": "Spare",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "--",
+            "connected_load_va": 0,
+            "estimated_demand_va": null,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 73
+          },
+          {
+            "ckt": 75,
+            "load_name": "Spare",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Spare",
+            "connected_load_va": 0,
+            "estimated_demand_va": null,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 75
+          },
+          {
+            "ckt": 77,
+            "load_name": "Spare",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Spare",
+            "connected_load_va": 0,
+            "estimated_demand_va": null,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 77
+          },
+          {
+            "ckt": 79,
+            "load_name": "Spare",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "--",
+            "connected_load_va": 0,
+            "estimated_demand_va": null,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 79
+          },
+          {
+            "ckt": 81,
+            "load_name": "Spare",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "--",
+            "connected_load_va": 0,
+            "estimated_demand_va": null,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 81
+          },
+          {
+            "ckt": 83,
+            "load_name": "Spare",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "--",
+            "connected_load_va": 0,
+            "estimated_demand_va": null,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 83
           }
         ]
       },
       {
-        "panel_name": "H1",
+        "panel_id": "H1",
         "enclosure_info": {
           "info": null,
           "mounting": null,
@@ -1726,65 +2438,70 @@
         },
         "total_estimated_demand_amps": 10,
         "total_connected_amps": 16,
-        "total_estimated_demand_va": 3635,
-        "total_connected_load_va": 5592,
-        "load_classification_summary": {
-          "Kitchen Equipment - Non-Dwelling Unit": {
+        "loads": {
+          "kitchen_equipment_non_dwelling_unit": {
             "connected_load_va": 5592,
-            "demand_factor_percent": 65,
+            "demand_factor_percent": 65.0,
             "estimated_demand_va": 3635
           }
         },
+        "total_connected_load_va": 5592,
+        "total_estimated_demand_va": 3635,
         "panel_totals": {
-          "total_amps": {
-            "A": 19,
-            "B": 13,
-            "C": 15
-          },
-          "total_load_va": {
-            "A": 2240,
-            "B": 1560,
-            "C": 1792
-          }
+          "total_amps": [
+            19,
+            13,
+            15
+          ],
+          "total_load_va": [
+            2240,
+            1560,
+            1792
+          ]
         },
         "circuits": [
           {
-            "circuit_number": 1,
-            "load_classification": "Kitchen Equipment ...",
+            "ckt": 1,
             "load_name": "E-117(*)",
             "trip": "15 A",
             "poles": 1,
+            "load_classification": "Kitchen Equipment ...",
+            "connected_load_va": 1200,
+            "estimated_demand_va": 520,
             "phase_loads": {
-              "A": "1200 VA",
-              "B": "520 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 2,
-              "load_classification": "Kitchen Equipment ...",
-              "load_name": "E-153(*)",
-              "trip": "15 A",
-              "poles": 2,
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
               "phase_loads": {
                 "A": null,
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 1
           },
           {
-            "circuit_number": 3,
-            "load_classification": "Kitchen Equipment ...",
+            "ckt": 2,
             "load_name": "E-153(*)",
             "trip": "15 A",
             "poles": 2,
+            "load_classification": "Kitchen Equipment ...",
+            "connected_load_va": null,
+            "estimated_demand_va": null,
             "phase_loads": {
-              "A": "520 VA",
-              "B": "520 VA",
+              "A": null,
+              "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 4,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -1794,69 +2511,24 @@
                 "B": null,
                 "C": null
               }
-            }
-          },
-          {
-            "circuit_number": 5,
-            "load_classification": null,
-            "load_name": null,
-            "trip": null,
-            "poles": null,
-            "phase_loads": {
-              "A": "520 VA",
-              "B": "0 VA",
-              "C": null
             },
-            "right_side": {
-              "circuit_number": 6,
-              "load_classification": "Spare*",
-              "load_name": null,
-              "trip": "20 A",
-              "poles": 1,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
+            "circuit_number": 2
           },
           {
-            "circuit_number": 7,
-            "load_classification": "Space",
-            "load_name": null,
-            "trip": null,
-            "poles": 1,
+            "ckt": 3,
+            "load_name": "E-153(*)",
+            "trip": "15 A",
+            "poles": 2,
+            "load_classification": "Kitchen Equipment ...",
+            "connected_load_va": 520,
+            "estimated_demand_va": 520,
             "phase_loads": {
-              "A": "520 VA",
+              "A": null,
               "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 8,
-              "load_classification": "Kitchen Equipment ...",
-              "load_name": "E-153(*)",
-              "trip": "15 A",
-              "poles": 2,
-              "phase_loads": {
-                "A": null,
-                "B": null,
-                "C": null
-              }
-            }
-          },
-          {
-            "circuit_number": 9,
-            "load_classification": "Space",
-            "load_name": null,
-            "trip": null,
-            "poles": 1,
-            "phase_loads": {
-              "A": "520 VA",
-              "B": null,
-              "C": null
-            },
-            "right_side": {
-              "circuit_number": 10,
+              "circuit_number": null,
               "load_classification": null,
               "load_name": null,
               "trip": null,
@@ -1866,23 +2538,26 @@
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 3
           },
           {
-            "circuit_number": 11,
-            "load_classification": "Space",
-            "load_name": null,
-            "trip": null,
+            "ckt": 5,
+            "load_name": "Spare*",
+            "trip": "20 A",
             "poles": 1,
+            "load_classification": "Kitchen Equipment ...",
+            "connected_load_va": 520,
+            "estimated_demand_va": 0,
             "phase_loads": {
-              "A": "1272 VA",
+              "A": null,
               "B": null,
               "C": null
             },
             "right_side": {
-              "circuit_number": 12,
-              "load_classification": "Kitchen Equipment ...",
-              "load_name": "E-120 & E-121(*)",
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
               "trip": null,
               "poles": null,
               "phase_loads": {
@@ -1890,12 +2565,94 @@
                 "B": null,
                 "C": null
               }
-            }
+            },
+            "circuit_number": 5
+          },
+          {
+            "ckt": 7,
+            "load_name": "Space",
+            "trip": "15 A",
+            "poles": 1,
+            "load_classification": "Kitchen Equipment ...",
+            "connected_load_va": 520,
+            "estimated_demand_va": null,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 7
+          },
+          {
+            "ckt": 9,
+            "load_name": "Space",
+            "trip": "20 A",
+            "poles": 1,
+            "load_classification": "Kitchen Equipment ...",
+            "connected_load_va": 520,
+            "estimated_demand_va": null,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 9
+          },
+          {
+            "ckt": 11,
+            "load_name": "E-120 & E-121(*)",
+            "trip": "15 A",
+            "poles": 1,
+            "load_classification": "Space",
+            "connected_load_va": 1272,
+            "estimated_demand_va": null,
+            "phase_loads": {
+              "A": null,
+              "B": null,
+              "C": null
+            },
+            "right_side": {
+              "circuit_number": null,
+              "load_classification": null,
+              "load_name": null,
+              "trip": null,
+              "poles": null,
+              "phase_loads": {
+                "A": null,
+                "B": null,
+                "C": null
+              }
+            },
+            "circuit_number": 11
           }
         ]
       },
       {
-        "panel_name": "K1S",
+        "panel_id": "K1S",
         "enclosure_info": {
           "info": "* GFCI CIRCUIT BREAKER",
           "mounting": null,
@@ -1908,31 +2665,26 @@
           "volts": "120/208 Wye",
           "aic_rating": "14k"
         },
-        "total_estimated_demand_amps": null,
-        "total_connected_amps": null,
-        "total_estimated_demand_va": null,
-        "total_connected_load_va": null,
-        "load_classification_summary": null,
-        "panel_totals": null,
-        "circuits": []
+        "circuits_count": 3
       }
     ]
   },
   "source_document": {
-    "uri": "/Users/collin/Desktop/elecshuffletest/output/source-documents/Electrical/d7bc8a3f/E5.00-PANEL-SCHEDULES-Rev.3 copy.pdf",
-    "storage_name": "Electrical/d7bc8a3f/E5.00-PANEL-SCHEDULES-Rev.3 copy.pdf",
+    "uri": "https://aisearchohmniv1.blob.core.windows.net/drawings-unified/sources/electrical/e5-00-panel-schedules-copy/E5.00-PANEL-SCHEDULES-Rev.3%20copy.pdf",
+    "storage_name": "sources/electrical/e5-00-panel-schedules-copy/E5.00-PANEL-SCHEDULES-Rev.3 copy.pdf",
     "filename": "E5.00-PANEL-SCHEDULES-Rev.3 copy.pdf",
     "size_bytes": 210033,
     "checksum_sha256": "0e7c4ee10346420a476e747ebc69a537e5c09d65843646673a1fdc54be07ee54",
     "content_type": "application/pdf",
-    "archived_at": 1762472341.409628,
-    "local_path": "/Users/collin/Desktop/elecshuffletest/output/source-documents/Electrical/d7bc8a3f/E5.00-PANEL-SCHEDULES-Rev.3 copy.pdf",
+    "archived_at": 1763166508.127442,
     "storage_metadata": {
       "content_type": "application/pdf",
-      "pipeline_id": "d7bc8a3f-4515-4cba-8533-4bd4fe10fa2a",
+      "pipeline_id": "d5405169-9d52-47ff-99e6-11e01e330dee",
       "drawing_type": "Electrical",
       "original_filename": "E5.00-PANEL-SCHEDULES-Rev.3 copy.pdf",
       "checksum_sha256": "0e7c4ee10346420a476e747ebc69a537e5c09d65843646673a1fdc54be07ee54"
     }
-  }
+  },
+  "tenant_id": "ohmni",
+  "page_number": 1
 }

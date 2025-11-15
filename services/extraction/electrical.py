@@ -22,6 +22,8 @@ from config.settings import (
     PANEL_HEADER_TOL,
     PANEL_HEADER_TOL_RETRY,
     PANEL_MIN_ROWS_FOR_PANEL,
+    PANEL_EXPECTED_MIN_CIRCUITS,
+    PANEL_MAX_RETRY_ATTEMPTS,
     PANEL_DEBUG_MODE,
 )
 
@@ -295,6 +297,17 @@ IMPORTANT FOR JSON STRUCTURE:
                             )
                             continue
 
+                        # Validate circuit count
+                        circuits = panel_data.get("circuits", [])
+                        circuit_count = len([c for c in circuits if c.get("circuit_number") is not None])
+                        
+                        if circuit_count < PANEL_EXPECTED_MIN_CIRCUITS:
+                            self.logger.warning(
+                                f"panel={panel_name} low_circuit_count={circuit_count} < {PANEL_EXPECTED_MIN_CIRCUITS} "
+                                f"expected_minimum. This may indicate incomplete extraction. "
+                                f"rect_height={rect.height:.1f} words_in_rect={len(page.get_text('words', clip=rect))}"
+                            )
+                        
                         # Build structured text output
                         panel_section = self._build_panel_text_section(
                             panel_name, panel_data
@@ -302,12 +315,12 @@ IMPORTANT FOR JSON STRUCTURE:
                         all_panels_text.append(panel_section)
 
                         # Log extraction metrics
-                        circuits = panel_data.get("circuits", [])
                         paired_count = sum(
                             1 for c in circuits if c.get("paired_circuit")
                         )
                         self.logger.info(
-                            f"panel={panel_name} circuits_emitted={len(circuits)} paired_even={paired_count}"
+                            f"panel={panel_name} circuits_emitted={circuit_count} paired_even={paired_count} "
+                            f"validation={'PASS' if circuit_count >= PANEL_EXPECTED_MIN_CIRCUITS else 'WARN'}"
                         )
 
                 else:
@@ -339,7 +352,7 @@ IMPORTANT FOR JSON STRUCTURE:
             raise
 
     def _extract_panel_struct(
-        self, page: fitz.Page, name: str, rect: fitz.Rect, *, header_tol: float
+        self, page: fitz.Page, name: str, rect: fitz.Rect, *, header_tol: float, retry_attempt: int = 0
     ) -> Dict[str, Any]:
         """
         Extract structured panel data with column mapping and circuit pairing.
@@ -349,6 +362,7 @@ IMPORTANT FOR JSON STRUCTURE:
             name: Panel name
             rect: Panel bounding rectangle
             header_tol: Header detection tolerance
+            retry_attempt: Current retry attempt number (0 = first attempt)
         
         Returns:
             Dictionary with panel_name, metadata, circuits, or summary
@@ -384,8 +398,8 @@ IMPORTANT FOR JSON STRUCTURE:
         total_mapped = len(left_mapped) + len(right_mapped)
         header_names = list(set(list(left_headers.keys()) + list(right_headers.keys())))
         self.logger.info(
-            f"panel={name} rect=[{rect.x0:.1f},{rect.y0:.1f},{rect.x1:.1f},{rect.y1:.1f}] "
-            f"words={total_words} headers={header_names} mapped_rows={total_mapped}"
+            f"panel={name} attempt={retry_attempt} rect=[{rect.x0:.1f},{rect.y0:.1f},{rect.x1:.1f},{rect.y1:.1f}] "
+            f"words={total_words} headers={header_names} mapped_rows={total_mapped} header_tol={header_tol:.1f}"
         )
 
         # Build row objects from mapped data
@@ -426,24 +440,37 @@ IMPORTANT FOR JSON STRUCTURE:
                 circuit["paired_circuit"] = right_side
             circuits.append(circuit)
 
-        # Retry with relaxed tolerance if needed
-        if (
-            len(circuits) < PANEL_MIN_ROWS_FOR_PANEL
+        # Progressive retry logic with increasingly relaxed parameters
+        circuit_count = len([c for c in circuits if c.get("circuit_number") is not None])
+        needs_retry = (
+            circuit_count < PANEL_MIN_ROWS_FOR_PANEL
             and len(block_text) > 1000
-            and header_tol == PANEL_HEADER_TOL
-        ):
+            and retry_attempt < PANEL_MAX_RETRY_ATTEMPTS
+        )
+
+        if needs_retry:
+            retry_attempt += 1
+            # Progressively expand rectangle and relax tolerance
+            expand_factor = 5 + (retry_attempt * 10)  # 5, 15, 25, etc.
+            new_header_tol = PANEL_HEADER_TOL_RETRY + (retry_attempt * 10)  # 45, 55, 65, etc.
+            
+            # Expand rect more aggressively, especially downward
+            page_rect = page.rect
+            expanded_rect = fitz.Rect(
+                max(0, rect.x0 - expand_factor),
+                max(0, rect.y0 - expand_factor),
+                min(page_rect.x1, rect.x1 + expand_factor),
+                min(page_rect.y1, rect.y1 + expand_factor * 2),  # Expand more downward
+            )
+            
             self.logger.warning(
-                f"fallback: header_mapping_failed for {name}, retrying with relaxed tolerance and widened rect"
+                f"panel={name} low_circuit_count={circuit_count} < {PANEL_MIN_ROWS_FOR_PANEL}, "
+                f"retry={retry_attempt}/{PANEL_MAX_RETRY_ATTEMPTS} expanding_rect by {expand_factor}pt, "
+                f"relaxing_tol to {new_header_tol:.1f}"
             )
-            # Widen rect by ±5pt
-            widened_rect = fitz.Rect(
-                max(0, rect.x0 - 5),
-                max(0, rect.y0 - 5),
-                rect.x1 + 5,
-                rect.y1 + 5,
-            )
+            
             return self._extract_panel_struct(
-                page, name, widened_rect, header_tol=PANEL_HEADER_TOL_RETRY
+                page, name, expanded_rect, header_tol=new_header_tol, retry_attempt=retry_attempt
             )
 
         # Extract metadata from header band

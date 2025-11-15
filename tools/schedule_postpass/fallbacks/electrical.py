@@ -3,7 +3,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, Generator, Optional
 
-from .common import ci_get, first_non_empty
+from .common import (
+    ci_get,
+    extract_text_from_phase_loads,
+    first_non_empty,
+)
 
 
 def iter_panel_rows(raw_json: Dict[str, Any]) -> Generator[Dict[str, Any], None, None]:
@@ -14,6 +18,8 @@ def iter_panel_rows(raw_json: Dict[str, Any]) -> Generator[Dict[str, Any], None,
       - ELECTRICAL.panels[].circuits[]
       - ELECTRICAL.PANEL_SCHEDULES{panel_name}.circuit_details[] / .circuits[]
       - ELECTRICAL.panel_schedules[] with inner .circuits[] / .circuit_details[]
+    
+    Also handles paired circuits (left/right side) and extracts descriptive text from phase_loads.
     """
     if not isinstance(raw_json, dict):
         return
@@ -32,6 +38,8 @@ def iter_panel_rows(raw_json: Dict[str, Any]) -> Generator[Dict[str, Any], None,
         for entry in circuits:
             if not isinstance(entry, dict):
                 continue
+            
+            # Extract primary circuit data
             circuit_num = first_non_empty(
                 ci_get(entry, "circuit"),
                 ci_get(entry, "circuit_number"),
@@ -45,6 +53,11 @@ def iter_panel_rows(raw_json: Dict[str, Any]) -> Generator[Dict[str, Any], None,
                 ci_get(entry, "load"),
                 ci_get(entry, "device"),
             )
+            # If description is empty, try extracting from phase_loads
+            if not description:
+                phase_loads = ci_get(entry, "phase_loads")
+                description = extract_text_from_phase_loads(phase_loads)
+            
             amps = first_non_empty(
                 ci_get(entry, "trip"),
                 ci_get(entry, "amps"),
@@ -57,18 +70,103 @@ def iter_panel_rows(raw_json: Dict[str, Any]) -> Generator[Dict[str, Any], None,
                 ci_get(entry, "pole"),
                 ci_get(entry, "phase_count"),
             )
-            row: Dict[str, Any] = {
-                "panel": panel_name,
-                "circuit": circuit_num,
-                "description": description,
-                "amps": amps,
-            }
-            if panel_voltage:
-                row["voltage"] = panel_voltage
-            if phase_or_poles is not None:
-                row["phase"] = phase_or_poles
-                row["poles"] = phase_or_poles
-            yield row
+            
+            # Yield primary circuit if it has a circuit number
+            if circuit_num:
+                row: Dict[str, Any] = {
+                    "panel": panel_name,
+                    "circuit": circuit_num,
+                    "description": description,
+                    "amps": amps,
+                }
+                if panel_voltage:
+                    row["voltage"] = panel_voltage
+                if phase_or_poles is not None:
+                    row["phase"] = phase_or_poles
+                    row["poles"] = phase_or_poles
+                yield row
+            
+            # Extract and yield right_side/paired circuit data
+            right_side = ci_get(entry, "right_side")
+            right_circuit_num = None
+            right_description = None
+            right_amps = None
+            right_poles = None
+            
+            # Try right_side object first
+            if isinstance(right_side, dict):
+                right_circuit_num = first_non_empty(
+                    ci_get(right_side, "circuit_number"),
+                    ci_get(right_side, "circuit"),
+                    ci_get(right_side, "ckt"),
+                    ci_get(right_side, "cct"),
+                )
+                right_description = first_non_empty(
+                    ci_get(right_side, "load_name"),
+                    ci_get(right_side, "description"),
+                    ci_get(right_side, "load"),
+                )
+                # Extract from right_side phase_loads if description is empty
+                if not right_description:
+                    right_phase_loads = ci_get(right_side, "phase_loads")
+                    right_description = extract_text_from_phase_loads(right_phase_loads)
+                right_amps = first_non_empty(
+                    ci_get(right_side, "trip"),
+                    ci_get(right_side, "amps"),
+                    ci_get(right_side, "breaker"),
+                )
+                right_poles = first_non_empty(
+                    ci_get(right_side, "poles"),
+                    ci_get(right_side, "pole"),
+                    ci_get(right_side, "phase"),
+                )
+            
+            # Fallback to _b suffixed fields if right_side didn't provide circuit number
+            if not right_circuit_num:
+                right_circuit_num = first_non_empty(
+                    ci_get(entry, "ckt_b"),
+                    ci_get(entry, "circuit_b"),
+                    ci_get(entry, "circuit_number_b"),
+                )
+                if not right_description:
+                    right_description = first_non_empty(
+                        ci_get(entry, "load_name_b"),
+                        ci_get(entry, "description_b"),
+                        ci_get(entry, "load_b"),
+                    )
+                if not right_amps:
+                    right_amps = first_non_empty(
+                        ci_get(entry, "trip_b"),
+                        ci_get(entry, "amps_b"),
+                        ci_get(entry, "breaker_b"),
+                    )
+                if not right_poles:
+                    right_poles = first_non_empty(
+                        ci_get(entry, "poles_b"),
+                        ci_get(entry, "pole_b"),
+                        ci_get(entry, "phase_b"),
+                    )
+            
+            # Also check main entry's phase_loads for descriptive text if still no description
+            # (descriptive text in phase_loads may describe the right side circuit)
+            if not right_description:
+                main_phase_loads = ci_get(entry, "phase_loads")
+                right_description = extract_text_from_phase_loads(main_phase_loads)
+            
+            # Yield right side circuit if it has a circuit number
+            if right_circuit_num:
+                right_row: Dict[str, Any] = {
+                    "panel": panel_name,
+                    "circuit": right_circuit_num,
+                    "description": right_description,
+                    "amps": right_amps,
+                }
+                if panel_voltage:
+                    right_row["voltage"] = panel_voltage
+                if right_poles is not None:
+                    right_row["phase"] = right_poles
+                    right_row["poles"] = right_poles
+                yield right_row
 
     panels = ci_get(electrical, "panels", [])
     if isinstance(panels, list):

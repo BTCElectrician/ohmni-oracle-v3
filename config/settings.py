@@ -125,7 +125,9 @@ PANEL_Y_TOL_FRAC = float(os.getenv("PANEL_Y_TOL_FRAC", "0.08"))
 PANEL_PAD = float(os.getenv("PANEL_PAD", "10.0"))
 PANEL_HEADER_TOL = float(os.getenv("PANEL_HEADER_TOL", "30.0"))
 PANEL_HEADER_TOL_RETRY = float(os.getenv("PANEL_HEADER_TOL_RETRY", "45.0"))
-PANEL_MIN_ROWS_FOR_PANEL = int(os.getenv("PANEL_MIN_ROWS_FOR_PANEL", "4"))
+PANEL_MIN_ROWS_FOR_PANEL = int(os.getenv("PANEL_MIN_ROWS_FOR_PANEL", "25"))
+PANEL_EXPECTED_MIN_CIRCUITS = int(os.getenv("PANEL_EXPECTED_MIN_CIRCUITS", "20"))
+PANEL_MAX_RETRY_ATTEMPTS = int(os.getenv("PANEL_MAX_RETRY_ATTEMPTS", "3"))
 PANEL_DEBUG_MODE = os.getenv("PANEL_DEBUG_MODE", "false").lower() == "true"
 
 
