@@ -409,6 +409,15 @@ IMPORTANT FOR JSON STRUCTURE:
         # Pair left (odd) with right (even) circuits
         circuits = self._pair_circuits(left_rows, right_rows)
 
+        # Log pairing statistics for debugging
+        left_only = sum(1 for c in circuits if c.get("circuit_number") and not c.get("paired_circuit"))
+        paired = sum(1 for c in circuits if c.get("paired_circuit"))
+        right_only = len(circuits) - left_only - paired
+        self.logger.debug(
+            f"panel={name} pairing_stats: left_only={left_only} paired={paired} right_only={right_only} "
+            f"total_circuits={len(circuits)}"
+        )
+
         # Convert to format expected by normalize_left_right
         circuits_normalized = []
         for circuit in circuits:
@@ -542,7 +551,13 @@ IMPORTANT FOR JSON STRUCTURE:
     def _pair_circuits(
         self, left_rows: List[Dict[str, Any]], right_rows: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """Pair left (odd) circuits with right (even) circuits."""
+        """
+        Pair left (odd) circuits with right (even) circuits.
+
+        CRITICAL FIX: Emit circuits from BOTH sides, not just left.
+        If left side is missing but right exists, emit the right circuit as primary.
+        This prevents losing even-numbered circuits when left side extraction fails.
+        """
         circuits = []
         max_len = max(len(left_rows), len(right_rows))
 
@@ -550,28 +565,52 @@ IMPORTANT FOR JSON STRUCTURE:
             left = left_rows[i] if i < len(left_rows) else {}
             right = right_rows[i] if i < len(right_rows) else {}
 
-            # Build circuit object with left side and optional paired right side
-            circuit = {
-                "circuit_number": left.get("circuit_number"),
-                "load_name": left.get("load_name"),
-                "trip": left.get("trip"),
-                "poles": left.get("poles"),
-                "phase_loads": left.get("phase_loads", {"A": None, "B": None, "C": None}),
-            }
+            left_ckt = left.get("circuit_number")
+            right_ckt = right.get("circuit_number")
 
-            # Add paired circuit if right side has a circuit number
-            if right.get("circuit_number"):
-                circuit["paired_circuit"] = {
-                    "circuit_number": right.get("circuit_number"),
+            # Case 1: Both left and right have circuit numbers - emit left with paired right
+            if left_ckt is not None and right_ckt is not None:
+                circuit = {
+                    "circuit_number": left_ckt,
+                    "load_name": left.get("load_name"),
+                    "trip": left.get("trip"),
+                    "poles": left.get("poles"),
+                    "phase_loads": left.get("phase_loads", {"A": None, "B": None, "C": None}),
+                    "paired_circuit": {
+                        "circuit_number": right_ckt,
+                        "load_name": right.get("load_name"),
+                        "trip": right.get("trip"),
+                        "poles": right.get("poles"),
+                        "phase_loads": right.get("phase_loads", {"A": None, "B": None, "C": None}),
+                    }
+                }
+                circuits.append(circuit)
+
+            # Case 2: Only left has circuit number - emit left without pairing
+            elif left_ckt is not None:
+                circuit = {
+                    "circuit_number": left_ckt,
+                    "load_name": left.get("load_name"),
+                    "trip": left.get("trip"),
+                    "poles": left.get("poles"),
+                    "phase_loads": left.get("phase_loads", {"A": None, "B": None, "C": None}),
+                }
+                circuits.append(circuit)
+
+            # Case 3: Only right has circuit number - emit right as primary (CRITICAL FIX)
+            # This was the missing logic causing 35% circuit loss!
+            elif right_ckt is not None:
+                circuit = {
+                    "circuit_number": right_ckt,
                     "load_name": right.get("load_name"),
                     "trip": right.get("trip"),
                     "poles": right.get("poles"),
-                    "phase_loads": right.get(
-                        "phase_loads", {"A": None, "B": None, "C": None}
-                    ),
+                    "phase_loads": right.get("phase_loads", {"A": None, "B": None, "C": None}),
                 }
+                circuits.append(circuit)
 
-            circuits.append(circuit)
+            # Case 4: Neither side has circuit number - skip this row entirely
+            # (This is expected for blank rows or headers)
 
         return circuits
 
