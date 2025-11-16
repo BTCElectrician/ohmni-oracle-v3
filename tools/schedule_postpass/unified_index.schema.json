@@ -118,6 +118,7 @@
       {"name":"cri","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
       {"name":"mounting","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
       {"name":"dimming","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
+      {"name":"fixture_type","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
       
       {"name":"stc","type":"Edm.Double","searchable":false,"filterable":true,"sortable":true,"facetable":false},
       {"name":"fire_rating","type":"Edm.String","searchable":true,"filterable":true,"sortable":true,"facetable":true,"synonymMaps":["project-synonyms"]},
