@@ -7,6 +7,10 @@ from services.normalizers import normalize_panel_fields, normalize_mechanical_sc
 from utils.performance_utils import time_operation_context
 from processing.pipeline.types import ProcessingState
 from processing.pipeline.services import PipelineServices
+from tools.schedule_postpass.panel_text_postpass import (
+    fill_panels_from_sheet_text,
+    is_panel_schedule_sheet,
+)
 
 
 async def step_normalize_data(
@@ -53,6 +57,27 @@ async def step_normalize_data(
         "plumbing" in processing_type.lower() and 
         "schedule" in (subtype or "").lower()
     )
+    
+    # Apply panel post-pass before normalization if applicable
+    if is_panel_schedule:
+        extraction_result = state.get("extraction_result")
+        if extraction_result and extraction_result.raw_text:
+            sheet_text = extraction_result.raw_text
+            if is_panel_schedule_sheet(parsed_json):
+                try:
+                    logger.info(f"Running panel text post-pass for {file_name}")
+                    client = services["client"]
+                    parsed_json = await fill_panels_from_sheet_text(
+                        sheet_json=parsed_json,
+                        sheet_text=sheet_text,
+                        client=client,
+                    )
+                    state["parsed_json_data"] = parsed_json
+                except Exception as e:
+                    logger.warning(
+                        f"Panel post-pass failed for {file_name}: {e}, continuing with original data",
+                        exc_info=True
+                    )
     
     # Apply appropriate normalization
     with time_operation_context(
