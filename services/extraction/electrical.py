@@ -3,7 +3,10 @@ Electrical drawing extractor with panel schedule support.
 """
 import os
 import re
+import json
 import logging
+from pathlib import Path
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 import pymupdf as fitz
@@ -25,6 +28,7 @@ from config.settings import (
     PANEL_EXPECTED_MIN_CIRCUITS,
     PANEL_MAX_RETRY_ATTEMPTS,
     PANEL_DEBUG_MODE,
+    PANEL_DEBUG_LOG_DIR,
 )
 
 from .base import PyMuPdfExtractor
@@ -406,6 +410,21 @@ IMPORTANT FOR JSON STRUCTURE:
         left_rows = self._build_rows_from_mapped(left_mapped, side="left")
         right_rows = self._build_rows_from_mapped(right_mapped, side="right")
 
+        self._log_panel_side_debug(
+            name,
+            "left",
+            headers=left_headers,
+            mapped_rows=left_mapped,
+            parsed_rows=left_rows,
+        )
+        self._log_panel_side_debug(
+            name,
+            "right",
+            headers=right_headers,
+            mapped_rows=right_mapped,
+            parsed_rows=right_rows,
+        )
+
         # Pair left (odd) with right (even) circuits
         circuits = self._pair_circuits(left_rows, right_rows)
 
@@ -433,6 +452,7 @@ IMPORTANT FOR JSON STRUCTURE:
 
         # Apply normalize_left_right
         circuits_normalized = normalize_left_right(circuits_normalized)
+        self._log_pairing_debug(name, circuits_normalized)
 
         # Convert back to our format
         circuits = []
@@ -515,6 +535,125 @@ IMPORTANT FOR JSON STRUCTURE:
             }
             rows.append(row)
         return rows
+
+    def _should_log_panel_debug(self, row_count: int) -> bool:
+        """Determine whether extra logging should fire for a panel side/pair."""
+        return PANEL_DEBUG_MODE or row_count < PANEL_MIN_ROWS_FOR_PANEL
+
+    def _write_panel_debug_file(
+        self, panel_name: str, category: str, payload: Dict[str, Any]
+    ) -> None:
+        """Persist debug diagnostics to jsonl so long runs can be reviewed later."""
+        if not PANEL_DEBUG_LOG_DIR:
+            return
+        try:
+            log_dir = Path(PANEL_DEBUG_LOG_DIR)
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_path = log_dir / f"{panel_name}.jsonl"
+            entry = {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "panel": panel_name,
+                "category": category,
+                "payload": payload,
+            }
+            with log_path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(entry))
+                fh.write("\n")
+        except Exception as exc:
+            self.logger.debug(
+                "panel_debug_file_write_failed panel=%s category=%s err=%s",
+                panel_name,
+                category,
+                exc,
+            )
+
+    def _log_panel_side_debug(
+        self,
+        panel_name: str,
+        side: str,
+        *,
+        headers: Dict[str, float],
+        mapped_rows: Dict[int, Dict[str, str]],
+        parsed_rows: List[Dict[str, Any]],
+    ) -> None:
+        """Emit detailed diagnostics for a panel side when extraction looks sparse."""
+        row_count = len(parsed_rows)
+        if not self._should_log_panel_debug(row_count):
+            return
+
+        with_numbers = sum(
+            1 for row in parsed_rows if row.get("circuit_number") is not None
+        )
+        sample_rows = []
+        for row_idx in sorted(mapped_rows.keys()):
+            row_data = mapped_rows[row_idx]
+            sample_rows.append(
+                {
+                    "row": row_idx,
+                    "ckt": row_data.get("CKT"),
+                    "load": row_data.get("LOAD_NAME"),
+                    "trip": row_data.get("TRIP"),
+                }
+            )
+            if len(sample_rows) >= 3:
+                break
+
+        self.logger.warning(
+            "panel=%s side=%s header_cols=%s mapped_rows=%d parsed_rows=%d circuits_with_numbers=%d sample_rows=%s",
+            panel_name,
+            side,
+            list(headers.keys()) or ["<none>"],
+            len(mapped_rows),
+            row_count,
+            with_numbers,
+            sample_rows,
+        )
+        self._write_panel_debug_file(
+            panel_name,
+            f"{side}_side",
+            {
+                "header_cols": list(headers.keys()),
+                "mapped_rows": len(mapped_rows),
+                "parsed_rows": row_count,
+                "circuits_with_numbers": with_numbers,
+                "sample_rows": sample_rows,
+            },
+        )
+
+    def _log_pairing_debug(
+        self, panel_name: str, rows: List[Dict[str, Any]]
+    ) -> None:
+        """Log row pairing results when we fall below expected circuit counts."""
+        circuit_count = sum(1 for row in rows if row.get("circuit_number") is not None)
+        if not self._should_log_panel_debug(circuit_count):
+            return
+
+        missing_right = [
+            row.get("circuit_number")
+            for row in rows
+            if row.get("circuit_number") is not None
+            and not ((row.get("right_side") or {}).get("circuit_number"))
+        ]
+        sample_missing = missing_right[:5]
+
+        self.logger.warning(
+            "panel=%s pairing_summary=rows:%d circuits:%d missing_right_count=%d sample_missing=%s",
+            panel_name,
+            len(rows),
+            circuit_count,
+            len(missing_right),
+            sample_missing,
+        )
+        self._write_panel_debug_file(
+            panel_name,
+            "pairing",
+            {
+                "row_count": len(rows),
+                "circuit_count": circuit_count,
+                "missing_right_count": len(missing_right),
+                "sample_missing": sample_missing,
+            },
+        )
 
     def _parse_circuit_number(self, value: str) -> Optional[int]:
         """Parse circuit number from string."""

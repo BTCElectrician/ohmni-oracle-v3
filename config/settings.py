@@ -129,6 +129,11 @@ PANEL_MIN_ROWS_FOR_PANEL = int(os.getenv("PANEL_MIN_ROWS_FOR_PANEL", "25"))
 PANEL_EXPECTED_MIN_CIRCUITS = int(os.getenv("PANEL_EXPECTED_MIN_CIRCUITS", "20"))
 PANEL_MAX_RETRY_ATTEMPTS = int(os.getenv("PANEL_MAX_RETRY_ATTEMPTS", "3"))
 PANEL_DEBUG_MODE = os.getenv("PANEL_DEBUG_MODE", "false").lower() == "true"
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+PANEL_DEBUG_LOG_DIR = os.getenv(
+    "PANEL_DEBUG_LOG_DIR",
+    os.path.join(BASE_DIR, "tmp", "panel_debug"),
+)
 
 
 def get_all_settings() -> Dict[str, Any]:
