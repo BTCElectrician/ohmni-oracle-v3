@@ -4,7 +4,7 @@ Handles panel schedules, circuits, and electrical system data.
 """
 import re
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from .common import safe_int
 
@@ -52,6 +52,46 @@ def normalize_phase_loads(data: Dict[str, Any]) -> Dict[str, Any]:
         "A": data.get("A") or data.get("va_phase_a"),
         "B": data.get("B") or data.get("va_phase_b"),
         "C": data.get("C") or data.get("va_phase_c"),
+    }
+
+
+def _has_panel_value(value: Any) -> bool:
+    """Determine whether a field contains meaningful data."""
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return True
+
+
+def _panel_side_is_empty(side: Optional[Dict[str, Any]]) -> bool:
+    """Return True if a right_side/paired circuit contains no usable data."""
+    if not isinstance(side, dict):
+        return True
+
+    if _has_panel_value(side.get("circuit_number")):
+        return False
+
+    for key in ("load_name", "load_classification", "trip", "poles"):
+        if _has_panel_value(side.get(key)):
+            return False
+
+    phase_loads = side.get("phase_loads") or {}
+    if any(_has_panel_value(phase_loads.get(phase)) for phase in ("A", "B", "C")):
+        return False
+
+    return True
+
+
+def _panel_entry_to_side(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert a normalized circuit entry into a right_side structure."""
+    return {
+        "circuit_number": extract_panel_circuit_number(entry),
+        "load_classification": entry.get("load_classification"),
+        "load_name": entry.get("load_name"),
+        "trip": entry.get("trip"),
+        "poles": entry.get("poles"),
+        "phase_loads": normalize_phase_loads(entry),
     }
 
 
@@ -135,8 +175,8 @@ def normalize_panels_list_entry(entry: Any, panel_name: str, index: int) -> Dict
         normalized["right_side"] = normalize_panel_side_data(
             normalized.get("right_side") or {}
         )
-    else:
-        normalized["right_side"] = normalize_panel_side_data({})
+        if _panel_side_is_empty(normalized["right_side"]):
+            normalized.pop("right_side", None)
 
     if normalized.get("circuit_number") is None:
         normalized["circuit_number"] = extract_panel_circuit_number(normalized)
@@ -391,6 +431,79 @@ def validate_panel_structure(electrical: Dict[str, Any]) -> None:
                         ckt["circuit"] = str(i + 1)
 
 
+def _pair_panel_circuits(circuits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Pair sequential odd/even circuits so the even entry becomes right_side data.
+    Returns a new list without duplicating even-numbered circuits.
+    """
+    if not isinstance(circuits, list):
+        return circuits
+
+    paired: List[Dict[str, Any]] = []
+    pending_left: Optional[Dict[str, Any]] = None
+
+    def flush_pending() -> None:
+        nonlocal pending_left
+        if pending_left:
+            right_side = pending_left.get("right_side")
+            if right_side and _panel_side_is_empty(right_side):
+                pending_left.pop("right_side", None)
+            paired.append(pending_left)
+            pending_left = None
+
+    for entry in circuits:
+        if not isinstance(entry, dict):
+            flush_pending()
+            paired.append(entry)
+            continue
+
+        # Normalize an existing right_side if present
+        if "right_side" in entry:
+            normalized_side = normalize_panel_side_data(entry.get("right_side") or {})
+            if _panel_side_is_empty(normalized_side):
+                entry.pop("right_side", None)
+            else:
+                entry["right_side"] = normalized_side
+
+        number = safe_int(entry.get("circuit_number"))
+        has_right_side = (
+            "right_side" in entry and not _panel_side_is_empty(entry.get("right_side"))
+        )
+
+        # Already paired entry - keep as-is
+        if has_right_side:
+            flush_pending()
+            paired.append(entry)
+            continue
+
+        if number is None:
+            flush_pending()
+            paired.append(entry)
+            continue
+
+        if number % 2 == 1:
+            flush_pending()
+            pending_left = entry
+            continue
+
+        # Even circuit: try to attach to pending odd
+        if pending_left and safe_int(pending_left.get("circuit_number")) is not None:
+            expected_even = safe_int(pending_left.get("circuit_number")) + 1
+        else:
+            expected_even = None
+
+        if pending_left and expected_even == number:
+            pending_left["right_side"] = _panel_entry_to_side(entry)
+            continue
+
+        # No matching odd - emit this even as its own row
+        flush_pending()
+        paired.append(entry)
+
+    flush_pending()
+    return paired
+
+
 def normalize_panel_fields(parsed_json: Dict[str, Any]) -> Dict[str, Any]:
     """
     If present, navigate to ELECTRICAL -> PANEL_SCHEDULES (object or array).
@@ -419,7 +532,9 @@ def normalize_panel_fields(parsed_json: Dict[str, Any]) -> Dict[str, Any]:
                         normalized_circuits.append(
                             normalize_single_circuit(ckt, panel_name, i)
                         )
-                    panel_data["circuit_details"] = normalized_circuits
+                    panel_data["circuit_details"] = _pair_panel_circuits(
+                        normalized_circuits
+                    )
                 else:
                     logger.warning(
                         f"Panel '{panel_name}' has a non-list 'circuit_details' field."
@@ -446,7 +561,7 @@ def normalize_panel_fields(parsed_json: Dict[str, Any]) -> Dict[str, Any]:
                     normalized_circuits.append(
                         normalize_single_circuit(ckt, panel_name, i)
                     )
-                panel_data["circuits"] = normalized_circuits
+                panel_data["circuits"] = _pair_panel_circuits(normalized_circuits)
             else:
                 logger.warning(
                     f"Panel '{panel_name}' has a non-list 'circuits' field."
@@ -479,7 +594,8 @@ def normalize_panel_fields(parsed_json: Dict[str, Any]) -> Dict[str, Any]:
                         parsed = safe_int(num)
                         return parsed if parsed is not None else 10**9
 
-                    panel["circuits"] = sorted(normalized_circuits, key=_sort_key)
+                    sorted_circuits = sorted(normalized_circuits, key=_sort_key)
+                    panel["circuits"] = _pair_panel_circuits(sorted_circuits)
     except Exception as e:
         logger.debug(f"Panel list post-processing note: {e}")
 

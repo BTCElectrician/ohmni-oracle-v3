@@ -499,6 +499,9 @@ IMPORTANT FOR JSON STRUCTURE:
         rows = []
         for row_idx in sorted(mapped_rows.keys()):
             row_data = mapped_rows[row_idx]
+            # Skip rows that have no textual content at all
+            if not any(value.strip() for value in row_data.values() if value):
+                continue
             row = {
                 "circuit_number": self._parse_circuit_number(row_data.get("CKT", "")),
                 "load_name": row_data.get("LOAD_NAME", "").strip() or None,
