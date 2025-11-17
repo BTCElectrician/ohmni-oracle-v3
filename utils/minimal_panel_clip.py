@@ -7,6 +7,16 @@ from __future__ import annotations
 import re
 import logging
 from typing import List, Tuple, Optional, Dict, Any
+HEADER_PATTERNS = {
+    "CKT": r"^(CKT|CIRCUIT)$",
+    "LOAD_NAME": r"^(LOAD\s*NAME|DESCRIPTION)$",
+    "TRIP": r"^(TRIP|BKR)$",
+    "POLES": r"^(POLES?|P)$",
+    "PHASE_A": r"^(A|PHASE\s*A)$",
+    "PHASE_B": r"^(B|PHASE\s*B)$",
+    "PHASE_C": r"^(C|PHASE\s*C)$",
+}
+
 import fitz  # PyMuPDF
 
 
@@ -177,6 +187,54 @@ def _shrink_rects_to_avoid_overlap(
     return adjusted
 
 
+def _word_looks_like_panel_content(text: str) -> bool:
+    """Heuristic to determine if a word likely belongs to panel table content."""
+    if not text:
+        return False
+    txt = text.strip()
+    if not txt:
+        return False
+    upper = txt.upper()
+    if re.match(r"^\d{1,3}$", upper):
+        return True
+    if re.match(r"^\d{1,3}[A-Z]?$", upper):
+        return True
+    if re.match(r"^\d{1,3}\s*(?:A|AMP|AMPS|VA|W|KW|KVA)$", upper):
+        return True
+    if upper in {"CKT", "CIRCUIT", "TOTAL", "SUMMARY", "LOAD", "LOADS", "PHASE"}:
+        return True
+    if upper in {"A", "B", "C", "A/B", "B/C", "A/C"}:
+        return True
+    if any(token in upper for token in ("VA", "KW", "AMP", "LOAD")):
+        return True
+    return False
+
+
+def _extend_panel_bottom_with_content(
+    words: List[Tuple],
+    *,
+    x_left: float,
+    x_right: float,
+    y_top: float,
+    default_bottom: float,
+    pad: float,
+    page_bottom: float,
+) -> float:
+    """Extend panel bottom boundary based on detected table content."""
+    y_bottom = max(default_bottom, y_top + pad * 2)
+    band_left = x_left - pad
+    band_right = x_right + pad
+    for x0, y0, x1, y1, text, *_ in words:
+        if y0 <= y_top:
+            continue
+        if x1 < band_left or x0 > band_right:
+            continue
+        if not _word_looks_like_panel_content(text):
+            continue
+        y_bottom = max(y_bottom, min(page_bottom, y1 + pad))
+    return min(y_bottom, page_bottom)
+
+
 def segment_panels(
     page: fitz.Page, *, y_tol: Optional[float] = None, pad: float = 10.0, logger: Optional[logging.Logger] = None
 ) -> List[Tuple[str, fitz.Rect]]:
@@ -197,6 +255,7 @@ def segment_panels(
     if y_tol is None:
         y_tol = min(120.0, page_rect.height * 0.08)
     
+    words = page.get_text("words", sort=True)
     anchors = _find_panel_anchors(page)
     if not anchors:
         return []
@@ -212,8 +271,9 @@ def segment_panels(
         # For last row, ensure we capture full height by going to page bottom
         if r_idx + 1 < len(rows):
             next_row_top = min(a[1].y0 for a in rows[r_idx + 1])
-            # Use 75% of distance to next row instead of 50% to capture more content
-            y_bottom = y_top + (next_row_top - y_top) * 0.75
+            gap = max(0.0, next_row_top - y_top)
+            # Use 90% of distance to next row to capture more content without bleeding
+            y_bottom = min(page_rect.y1, y_top + gap * 0.9)
         else:
             # Last row: go to page bottom, but ensure we don't cut off content
             # Look for text blocks below the anchor to determine actual panel height
@@ -242,8 +302,17 @@ def segment_panels(
                 if j == len(row) - 1
                 else (a_rect.x0 + row[j + 1][1].x0) / 2.0
             )
+            panel_y_bottom = _extend_panel_bottom_with_content(
+                words,
+                x_left=x_left,
+                x_right=x_right,
+                y_top=y_top,
+                default_bottom=y_bottom,
+                pad=pad,
+                page_bottom=page_rect.y1 - pad,
+            )
             rect = fitz.Rect(
-                x_left + pad, y_top + 2 * pad, x_right - pad, y_bottom - pad
+                x_left + pad, y_top + 2 * pad, x_right - pad, panel_y_bottom
             )
             
             # Log panel dimensions for debugging
@@ -374,26 +443,78 @@ def detect_column_headers(
     )
     
     words = page.get_text("words", clip=header_clip, sort=True)
-    header_patterns = {
-        "CKT": r"^(CKT|CIRCUIT)$",
-        "LOAD_NAME": r"^(LOAD\s*NAME|DESCRIPTION)$",
-        "TRIP": r"^(TRIP|BKR)$",
-        "POLES": r"^(POLES?|P)$",
-        "PHASE_A": r"^(A|PHASE\s*A)$",
-        "PHASE_B": r"^(B|PHASE\s*B)$",
-        "PHASE_C": r"^(C|PHASE\s*C)$",
-    }
-    
     headers = {}
     for x0, y0, x1, y1, txt, *_ in words:
         txt_upper = txt.upper().strip()
-        for col_name, pattern in header_patterns.items():
+        for col_name, pattern in HEADER_PATTERNS.items():
             if re.match(pattern, txt_upper, re.IGNORECASE):
                 # Store the center x position
                 headers[col_name] = (x0 + x1) / 2.0
                 break
     
     return headers
+
+
+def compute_left_right_split(
+    page: fitz.Page,
+    rect: fitz.Rect,
+    *,
+    header_band_px: float,
+    max_header_band_px: Optional[float] = None,
+    near_center_bias: float = 0.35,
+) -> Tuple[fitz.Rect, fitz.Rect, float]:
+    """
+    Split a panel rectangle into left/right halves using detected header positions.
+    """
+    band_height = header_band_px
+    if max_header_band_px is not None:
+        band_height = min(band_height, max_header_band_px)
+    header_clip = fitz.Rect(rect.x0, rect.y0, rect.x1, min(rect.y1, rect.y0 + band_height))
+    words = page.get_text("words", clip=header_clip, sort=True)
+
+    header_positions: List[float] = []
+    for x0, _, x1, _, txt, *_ in words:
+        txt_upper = txt.upper().strip()
+        for pattern in HEADER_PATTERNS.values():
+            if re.match(pattern, txt_upper, re.IGNORECASE):
+                header_positions.append((x0 + x1) / 2.0)
+                break
+
+    mid_x = (rect.x0 + rect.x1) / 2.0
+    split_x = mid_x
+    rect_half = max(1.0, rect.width / 2.0)
+
+    if len(header_positions) >= 2:
+        header_positions.sort()
+        best_score = None
+        best_split = mid_x
+        for i in range(len(header_positions) - 1):
+            left = header_positions[i]
+            right = header_positions[i + 1]
+            gap = right - left
+            if gap < 5:
+                continue
+            candidate = (left + right) / 2.0
+            center_offset = abs(candidate - mid_x) / rect_half
+            score = gap * (1.0 - near_center_bias * center_offset)
+            if best_score is None or score > best_score:
+                best_score = score
+                best_split = candidate
+        if best_score is not None:
+            split_x = best_split
+        else:
+            split_x = header_positions[len(header_positions) // 2]
+    elif len(header_positions) == 1:
+        only = header_positions[0]
+        if only > mid_x:
+            split_x = (only + rect.x0) / 2.0
+        else:
+            split_x = (only + rect.x1) / 2.0
+
+    split_x = max(rect.x0 + 1.0, min(rect.x1 - 1.0, split_x))
+    left_rect = fitz.Rect(rect.x0, rect.y0, split_x, rect.y1)
+    right_rect = fitz.Rect(split_x, rect.y0, rect.x1, rect.y1)
+    return left_rect, right_rect, split_x
 
 
 def get_panel_text_blocks(page: fitz.Page, clip: fitz.Rect) -> str:

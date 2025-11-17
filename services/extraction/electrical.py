@@ -17,6 +17,7 @@ from utils.minimal_panel_clip import (
     detect_column_headers,
     map_values_to_columns,
     normalize_left_right,
+    compute_left_right_split,
 )
 from config.settings import (
     PANEL_Y_TOL_MAX,
@@ -29,6 +30,11 @@ from config.settings import (
     PANEL_MAX_RETRY_ATTEMPTS,
     PANEL_DEBUG_MODE,
     PANEL_DEBUG_LOG_DIR,
+    PANEL_HEADER_BAND_PX,
+    PANEL_HEADER_BAND_RETRY_STEP,
+    PANEL_HEADER_BAND_MAX,
+    PANEL_SPLIT_MAX_BAND_PX,
+    PANEL_SPLIT_NEAR_CENTER_BIAS,
 )
 
 from .base import PyMuPdfExtractor
@@ -291,7 +297,11 @@ IMPORTANT FOR JSON STRUCTURE:
 
                         # Extract panel with column mapping
                         panel_data = self._extract_panel_struct(
-                            page, panel_name, rect, header_tol=PANEL_HEADER_TOL
+                            page,
+                            panel_name,
+                            rect,
+                            header_tol=PANEL_HEADER_TOL,
+                            header_band_px=PANEL_HEADER_BAND_PX,
                         )
 
                         if panel_data.get("summary"):
@@ -356,7 +366,14 @@ IMPORTANT FOR JSON STRUCTURE:
             raise
 
     def _extract_panel_struct(
-        self, page: fitz.Page, name: str, rect: fitz.Rect, *, header_tol: float, retry_attempt: int = 0
+        self,
+        page: fitz.Page,
+        name: str,
+        rect: fitz.Rect,
+        *,
+        header_tol: float,
+        header_band_px: float,
+        retry_attempt: int = 0,
     ) -> Dict[str, Any]:
         """
         Extract structured panel data with column mapping and circuit pairing.
@@ -377,18 +394,30 @@ IMPORTANT FOR JSON STRUCTURE:
             block_text = get_panel_text_blocks(page, rect)
             return {"summary": {"raw_text": block_text}}
 
-        # Split panel into left/right halves
-        mid_x = (rect.x0 + rect.x1) / 2.0
-        left_rect = fitz.Rect(rect.x0, rect.y0, mid_x, rect.y1)
-        right_rect = fitz.Rect(mid_x, rect.y0, rect.x1, rect.y1)
+        # Split panel into left/right halves using detected headers
+        left_rect, right_rect, split_x = compute_left_right_split(
+            page,
+            rect,
+            header_band_px=header_band_px,
+            max_header_band_px=PANEL_SPLIT_MAX_BAND_PX,
+            near_center_bias=PANEL_SPLIT_NEAR_CENTER_BIAS,
+        )
+        self.logger.debug(
+            "panel=%s split_x=%.1f left_width=%.1f right_width=%.1f header_band=%.1f",
+            name,
+            split_x,
+            left_rect.width,
+            right_rect.width,
+            header_band_px,
+        )
 
         # Extract left side
-        left_headers = detect_column_headers(page, left_rect, header_band_px=150.0)
+        left_headers = detect_column_headers(page, left_rect, header_band_px=header_band_px)
         left_words = page.get_text("words", clip=left_rect, sort=True)
         left_mapped = map_values_to_columns(left_words, left_headers, tolerance=header_tol)
 
         # Extract right side
-        right_headers = detect_column_headers(page, right_rect, header_band_px=150.0)
+        right_headers = detect_column_headers(page, right_rect, header_band_px=header_band_px)
         right_words = page.get_text("words", clip=right_rect, sort=True)
         right_mapped = map_values_to_columns(
             right_words, right_headers, tolerance=header_tol
@@ -453,6 +482,25 @@ IMPORTANT FOR JSON STRUCTURE:
         # Apply normalize_left_right
         circuits_normalized = normalize_left_right(circuits_normalized)
         self._log_pairing_debug(name, circuits_normalized)
+        if PANEL_DEBUG_MODE or len(circuits_normalized) < PANEL_MIN_ROWS_FOR_PANEL:
+            self._write_panel_debug_file(
+                name,
+                "segmentation",
+                {
+                    "rect": [rect.x0, rect.y0, rect.x1, rect.y1],
+                    "left_rect": [left_rect.x0, left_rect.y0, left_rect.x1, left_rect.y1],
+                    "right_rect": [
+                        right_rect.x0,
+                        right_rect.y0,
+                        right_rect.x1,
+                        right_rect.y1,
+                    ],
+                    "split_x": split_x,
+                    "header_band_px": header_band_px,
+                    "headers_left": left_headers,
+                    "headers_right": right_headers,
+                },
+            )
 
         # Convert back to our format
         circuits = []
@@ -482,6 +530,9 @@ IMPORTANT FOR JSON STRUCTURE:
             # Progressively expand rectangle and relax tolerance
             expand_factor = 5 + (retry_attempt * 10)  # 5, 15, 25, etc.
             new_header_tol = PANEL_HEADER_TOL_RETRY + (retry_attempt * 10)  # 45, 55, 65, etc.
+            new_header_band_px = min(
+                PANEL_HEADER_BAND_MAX, header_band_px + PANEL_HEADER_BAND_RETRY_STEP
+            )
             
             # Expand rect more aggressively, especially downward
             page_rect = page.rect
@@ -499,7 +550,12 @@ IMPORTANT FOR JSON STRUCTURE:
             )
             
             return self._extract_panel_struct(
-                page, name, expanded_rect, header_tol=new_header_tol, retry_attempt=retry_attempt
+                page,
+                name,
+                expanded_rect,
+                header_tol=new_header_tol,
+                header_band_px=new_header_band_px,
+                retry_attempt=retry_attempt,
             )
 
         # Extract metadata from header band

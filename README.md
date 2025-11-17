@@ -364,6 +364,13 @@ SPEC_MAX_TOKENS=16384
 PIPELINE_LOG_LEVEL=INFO     # to see detailed pipeline logs
 RESPONSES_TIMEOUT_SECONDS=200
 DEBUG_MODE=false
+
+# Panel schedule extraction
+PANEL_HEADER_BAND_PX=280
+PANEL_HEADER_BAND_RETRY_STEP=80
+PANEL_HEADER_BAND_MAX=520
+PANEL_SPLIT_MAX_BAND_PX=600
+PANEL_SPLIT_NEAR_CENTER_BIAS=0.35
 ```
 
 Batching and rate limits
@@ -462,6 +469,17 @@ The `ElectricalExtractor` automatically detects and separates individual panels 
    - Column header detection (CKT, TRIP, POLES, A/B/C phases)
    - Column drift protection (maps values to nearest column header)
    - Odd/even circuit normalization (fixes left/right swaps)
+
+### November 2025 Enhancements
+
+- **Content-aware segmentation** extends each panel rectangle until real circuit text is encountered, so tall panels no longer get clipped halfway down the table.
+- **Header-aware splitting** examines detected column positions and chooses the largest header gap near the center line; even-numbered circuits remain paired even when the table is off-center.
+- **Adaptive header bands** widen automatically on each retry to recover headers that sit far below the anchor row.
+- **Persistent diagnostics**: every under-filled panel writes a `segmentation` entry to `tmp/panel_debug/<panel>.jsonl` with the chosen split, rectangles, and headers, plus a `panel_split` log line for fast triage.
+- New environment knobs (see `.env` sample below):
+  - `PANEL_HEADER_BAND_PX` (default `280`) – base search height for headers.
+  - `PANEL_HEADER_BAND_RETRY_STEP` / `PANEL_HEADER_BAND_MAX` – progressive retry band controls.
+  - `PANEL_SPLIT_MAX_BAND_PX` and `PANEL_SPLIT_NEAR_CENTER_BIAS` – cap the header scan height for splitting and bias toward mid-sheet splits when gaps are ambiguous.
 
 ### Testing Different Grid Layouts
 

@@ -129,6 +129,14 @@ PANEL_MIN_ROWS_FOR_PANEL = int(os.getenv("PANEL_MIN_ROWS_FOR_PANEL", "25"))
 PANEL_EXPECTED_MIN_CIRCUITS = int(os.getenv("PANEL_EXPECTED_MIN_CIRCUITS", "20"))
 PANEL_MAX_RETRY_ATTEMPTS = int(os.getenv("PANEL_MAX_RETRY_ATTEMPTS", "3"))
 PANEL_DEBUG_MODE = os.getenv("PANEL_DEBUG_MODE", "false").lower() == "true"
+# Header detection height (points) for panel clipping
+PANEL_HEADER_BAND_PX = float(os.getenv("PANEL_HEADER_BAND_PX", "280.0"))
+PANEL_HEADER_BAND_RETRY_STEP = float(os.getenv("PANEL_HEADER_BAND_RETRY_STEP", "80.0"))
+PANEL_HEADER_BAND_MAX = float(os.getenv("PANEL_HEADER_BAND_MAX", "520.0"))
+# Split heuristics
+PANEL_SPLIT_MAX_BAND_PX = float(os.getenv("PANEL_SPLIT_MAX_BAND_PX", "600.0"))
+# Controls how aggressively left/right splits bias toward geometric center (0-1)
+PANEL_SPLIT_NEAR_CENTER_BIAS = float(os.getenv("PANEL_SPLIT_NEAR_CENTER_BIAS", "0.35"))
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 PANEL_DEBUG_LOG_DIR = os.getenv(
     "PANEL_DEBUG_LOG_DIR",
