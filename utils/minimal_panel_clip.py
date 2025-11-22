@@ -6,6 +6,7 @@ from PDF pages to prevent cross-panel text bleeding.
 from __future__ import annotations
 import re
 import logging
+from collections import defaultdict
 from typing import List, Tuple, Optional, Dict, Any
 HEADER_PATTERNS = {
     "CKT": r"^(CKT|CIRCUIT)$",
@@ -19,8 +20,14 @@ HEADER_PATTERNS = {
 
 import fitz  # PyMuPDF
 
+PANEL_RE = re.compile(r"\bpanel\b\s*:?\s*([A-Z0-9\-]+)", re.I)
+AMP_RE = re.compile(r"\b\d+\s*A\b", re.I)
+VA_RE = re.compile(r"\b\d[\d,]*\s*(?:VA|KVA|KW)\b", re.I)
+SPARE_RE = re.compile(r"\b(?:spare|space)\b", re.I)
+CKT_RE = re.compile(r"\b(\d{1,3})\b")
 
-def _find_panel_anchors(page: fitz.Page) -> List[Tuple[str, fitz.Rect]]:
+
+def _find_panel_anchors(page: fitz.Page, words: Optional[List[Tuple]] = None) -> List[Tuple[str, fitz.Rect]]:
     """
     Return [('K1', Rect), ('L1', Rect), ...] for this page.
     
@@ -29,7 +36,8 @@ def _find_panel_anchors(page: fitz.Page) -> List[Tuple[str, fitz.Rect]]:
     - Secondary: "<NAME> PANEL SCHEDULE", "SCHEDULE - <NAME>"
     - Filters out sheet summaries: TOTALS, SUMMARY, LOAD, LOAD SUMMARY
     """
-    words = page.get_text("words", sort=True)  # (x0, y0, x1, y1, text, block, line, wno)
+    if words is None:
+        words = page.get_text("words", sort=True)  # (x0, y0, x1, y1, text, block, line, wno)
     anchors: List[Tuple[str, fitz.Rect]] = []
     
     # Sheet summary names to filter out
@@ -140,7 +148,7 @@ def _shrink_rects_to_avoid_overlap(
     Returns:
         List of adjusted (name, rect) tuples
     """
-    adjusted = [(name, rect.copy()) for name, rect in rects]
+    adjusted = [(name, fitz.Rect(rect)) for name, rect in rects]
     
     for i in range(len(adjusted)):
         for j in range(i + 1, len(adjusted)):
@@ -256,7 +264,7 @@ def segment_panels(
         y_tol = min(120.0, page_rect.height * 0.08)
     
     words = page.get_text("words", sort=True)
-    anchors = _find_panel_anchors(page)
+    anchors = _find_panel_anchors(page, words=words)
     if not anchors:
         return []
     
@@ -615,3 +623,178 @@ def extract_panel_with_column_mapping(
         "mapped_rows": mapped_rows,
         "raw_text": block_text
     }
+
+
+def _normalize_bbox(bbox: Tuple[float, float, float, float], page_rect: Optional[fitz.Rect]) -> Optional[List[float]]:
+    """Normalize bounding box coordinates to [0, 1] range relative to page."""
+    if not page_rect:
+        return None
+    width = max(page_rect.width, 1.0)
+    height = max(page_rect.height, 1.0)
+    return [
+        round((bbox[0] - page_rect.x0) / width, 6),
+        round((bbox[1] - page_rect.y0) / height, 6),
+        round((bbox[2] - page_rect.x0) / width, 6),
+        round((bbox[3] - page_rect.y0) / height, 6),
+    ]
+
+
+def _words_to_lines(words: List[Tuple], page_rect: Optional[fitz.Rect]) -> List[Dict[str, Any]]:
+    """Group words into lines based on block/line numbers."""
+    grouped: Dict[Tuple[int, int], Dict[str, Any]] = {}
+    for x0, y0, x1, y1, text, block, line, *_ in words:
+        key = (block, line)
+        entry = grouped.setdefault(
+            key,
+            {
+                "text_parts": [],
+                "min_x": x0,
+                "max_x": x1,
+                "min_y": y0,
+                "max_y": y1,
+            },
+        )
+        entry["text_parts"].append(text)
+        entry["min_x"] = min(entry["min_x"], x0)
+        entry["max_x"] = max(entry["max_x"], x1)
+        entry["min_y"] = min(entry["min_y"], y0)
+        entry["max_y"] = max(entry["max_y"], y1)
+
+    lines: List[Dict[str, Any]] = []
+    for entry in grouped.values():
+        text = " ".join(entry["text_parts"]).strip()
+        if not text:
+            continue
+        bbox = (entry["min_x"], entry["min_y"], entry["max_x"], entry["max_y"])
+        cx = (entry["min_x"] + entry["max_x"]) / 2.0
+        cy = (entry["min_y"] + entry["max_y"]) / 2.0
+        lines.append(
+            {
+                "text": text,
+                "cx": cx,
+                "cy": cy,
+                "bbox": bbox,
+                "bbox_norm": _normalize_bbox(bbox, page_rect),
+            }
+        )
+    lines.sort(key=lambda item: (item["cy"], item["cx"]))
+    return lines
+
+
+def _is_circuit_line(text: str) -> bool:
+    """Determine if a line represents a circuit row."""
+    if not text:
+        return False
+    if not AMP_RE.search(text):
+        return False
+    if VA_RE.search(text) or SPARE_RE.search(text):
+        return True
+    return False
+
+
+def _assign_panel_to_lines(
+    lines: List[Dict[str, Any]], headers: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Assign circuit lines to nearest panel header based on coordinates."""
+    results: List[Dict[str, Any]] = []
+    if not headers:
+        return results
+
+    for line in lines:
+        if not _is_circuit_line(line["text"]):
+            continue
+        candidates = [
+            header
+            for header in headers
+            if line["cy"] >= header["cy"] - 5.0
+        ]
+        if not candidates:
+            continue
+
+        def _score(header: Dict[str, Any]) -> float:
+            dy = max(0.0, line["cy"] - header["cy"])
+            dx = abs(line["cx"] - header["cx"])
+            return dy * dy + (dx * 0.5) ** 2
+
+        owner = min(candidates, key=_score)
+        results.append({**line, "panel_id": owner["panel_id"]})
+    return results
+
+
+def _extract_circuit_number(text: str) -> Optional[int]:
+    """Extract circuit number from text, avoiding amps/VA values."""
+    candidates: List[int] = []
+    for match in CKT_RE.finditer(text):
+        tail = text[match.end() : match.end() + 4]
+        if re.match(r"\s*(?:A|AMP|AMPS|VA|KVA|KW)\b", tail, re.I):
+            continue
+        try:
+            candidates.append(int(match.group(1)))
+        except ValueError:
+            continue
+    if not candidates:
+        return None
+    return min(candidates)
+
+
+def build_panel_row_hints(page: fitz.Page, words: List[Tuple]) -> List[Dict[str, Any]]:
+    """
+    Build panel row hints by detecting panel headers and assigning circuit rows.
+    
+    Args:
+        page: PyMuPDF page object
+        words: List of word tuples from page.get_text("words", sort=True)
+    
+    Returns:
+        List of panel dictionaries with panel_id, cx, cy, and rows
+    """
+    if not words:
+        return []
+
+    anchors = _find_panel_anchors(page, words=words)
+    if not anchors:
+        return []
+
+    page_rect = getattr(page, "rect", None)
+    lines = _words_to_lines(words, page_rect)
+    headers = [
+        {
+            "panel_id": name,
+            "cx": (rect.x0 + rect.x1) / 2.0,
+            "cy": (rect.y0 + rect.y1) / 2.0,
+        }
+        for name, rect in anchors
+    ]
+    assigned = _assign_panel_to_lines(lines, headers)
+    if not assigned:
+        return []
+
+    grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for line in assigned:
+        grouped[line["panel_id"]].append(
+            {
+                "text": line["text"],
+                "ckt": _extract_circuit_number(line["text"]),
+                "cx": line["cx"],
+                "cy": line["cy"],
+                "bbox": line.get("bbox"),
+                "bbox_norm": line.get("bbox_norm"),
+            }
+        )
+
+    header_lookup = {header["panel_id"]: header for header in headers}
+    panels: List[Dict[str, Any]] = []
+    for panel_id, rows in grouped.items():
+        rows.sort(key=lambda row: ((row["ckt"] if row["ckt"] is not None else 9999), row["cy"]))
+        header = header_lookup.get(panel_id, {})
+        panels.append(
+            {
+                "panel_id": panel_id,
+                "cx": header.get("cx"),
+                "cy": header.get("cy"),
+                "rows": rows,
+            }
+        )
+
+    panels.sort(key=lambda panel: (panel.get("cy") if panel.get("cy") is not None else float("inf"), panel["panel_id"]))
+    return panels

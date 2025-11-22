@@ -60,9 +60,9 @@ def get_enable_metadata_repair():
 ENABLE_METADATA_REPAIR = get_enable_metadata_repair()
 
 # Model Configuration - Defaults updated for Responses (gpt-5)
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-5-mini")
-LARGE_DOC_MODEL = os.getenv("LARGE_DOC_MODEL", "gpt-5")
-SCHEDULE_MODEL = os.getenv("SCHEDULE_MODEL", "gpt-5")
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4.1-mini")
+LARGE_DOC_MODEL = os.getenv("LARGE_DOC_MODEL", "gpt-4.1-mini")
+SCHEDULE_MODEL = os.getenv("SCHEDULE_MODEL", "gpt-4.1-mini")
 TINY_MODEL = os.getenv("TINY_MODEL", "")  # Optional tiny model (e.g., "gpt-5-nano")
 TINY_MODEL_THRESHOLD = int(os.getenv("TINY_MODEL_THRESHOLD", "3000"))
 

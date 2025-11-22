@@ -11,6 +11,7 @@ import pymupdf as fitz
 
 from utils.performance_utils import time_operation, time_operation_context
 from utils.drawing_utils import detect_drawing_info
+from utils.minimal_panel_clip import build_panel_row_hints
 
 from .models import ExtractionResult
 from .titleblock import extract_titleblock_region_text
@@ -50,7 +51,7 @@ class PyMuPdfExtractor(PdfExtractor):
 
     def _extract_content(
         self, file_path: str
-    ) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any], str]:
+    ) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any], str, List[Dict[str, Any]]]:
         """
         Internal method to extract content from a PDF file.
         This method runs in a separate thread.
@@ -59,7 +60,7 @@ class PyMuPdfExtractor(PdfExtractor):
             file_path: Path to the PDF file
 
         Returns:
-            Tuple of (raw_text, tables, metadata, titleblock_text)
+            Tuple of (raw_text, tables, metadata, titleblock_text, panel_row_hints)
         """
         # Use context manager to ensure document is properly closed
         with fitz.open(file_path) as doc:
@@ -79,6 +80,7 @@ class PyMuPdfExtractor(PdfExtractor):
             raw_text = ""
             tables = []
             titleblock_text = ""
+            panel_row_hints: List[Dict[str, Any]] = []
 
             # Extract title block text from the first page (if pages exist)
             if len(doc) > 0:
@@ -127,13 +129,26 @@ class PyMuPdfExtractor(PdfExtractor):
                 )
                 tables.extend(page_tables)
 
+                # Panel hint harvesting (coordinate-aware circuits)
+                try:
+                    words = page.get_text("words", sort=True)
+                    if words:
+                        hints = build_panel_row_hints(page, words)
+                        if hints:
+                            panel_row_hints.append({"page": i + 1, "panels": hints})
+                except Exception as e:
+                    self.logger.debug(
+                        f"Panel hint extraction error on page {i+1} of {os.path.basename(file_path)}: {str(e)}",
+                        exc_info=True
+                    )
+
                 if not enable_table_extraction and not table_notice_logged:
                     self.logger.info(
                         "ENABLE_TABLE_EXTRACTION=false; skipping PyMuPDF table detection for speed"
                     )
                     table_notice_logged = True
 
-            return raw_text, tables, metadata, titleblock_text
+            return raw_text, tables, metadata, titleblock_text, panel_row_hints
 
     @time_operation("extraction")
     async def extract(self, file_path: str) -> ExtractionResult:
@@ -162,7 +177,13 @@ class PyMuPdfExtractor(PdfExtractor):
                 file_path=file_path,
                 drawing_type=detected_drawing_type,
             ):
-                raw_text, tables, metadata, titleblock_text = await loop.run_in_executor(
+                (
+                    raw_text,
+                    tables,
+                    metadata,
+                    titleblock_text,
+                    panel_row_hints,
+                ) = await loop.run_in_executor(
                     None, self._extract_content, file_path
                 )
 
@@ -184,6 +205,7 @@ class PyMuPdfExtractor(PdfExtractor):
                     error="No significant machine-readable content found.",
                     metadata=metadata,
                     titleblock_text=titleblock_text,
+                    panel_row_hints=panel_row_hints,
                 )
 
             self.logger.info(f"Successfully extracted content from {file_path}")
@@ -194,6 +216,7 @@ class PyMuPdfExtractor(PdfExtractor):
                 has_content=True,
                 metadata=metadata,
                 titleblock_text=titleblock_text,
+                panel_row_hints=panel_row_hints,
             )
         except Exception as e:
             self.logger.error(f"Error extracting content from {file_path}: {str(e)}")
@@ -205,6 +228,7 @@ class PyMuPdfExtractor(PdfExtractor):
                 error=str(e),
                 metadata={},
                 titleblock_text=None,
+                panel_row_hints=[],
             )
 
     async def save_page_as_image(

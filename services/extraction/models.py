@@ -19,6 +19,7 @@ class ExtractionResult:
     error: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = field(default_factory=dict)
     titleblock_text: Optional[str] = None
+    panel_row_hints: Optional[List[Dict[str, Any]]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert the result to a dictionary."""
@@ -30,6 +31,7 @@ class ExtractionResult:
             "error": self.error,
             "metadata": self.metadata,
             "titleblock_text": self.titleblock_text,
+            "panel_row_hints": self.panel_row_hints,
         }
 
     @classmethod
@@ -43,5 +45,6 @@ class ExtractionResult:
             error=data.get("error"),
             metadata=data.get("metadata", {}),
             titleblock_text=data.get("titleblock_text"),
+            panel_row_hints=data.get("panel_row_hints", []),
         )
 

@@ -5,7 +5,7 @@ Handles AI processing and JSON parsing.
 """
 import os
 import asyncio
-from typing import Tuple
+from typing import Tuple, Any, Dict, List
 
 from services.ai_service import process_drawing
 from utils.json_utils import parse_json_safely
@@ -118,6 +118,11 @@ async def step_ai_processing_and_parsing(
             )
             
             if parsed_json:
+                # Merge panel hints into blocks if available
+                panel_hints = extraction_result.panel_row_hints
+                if panel_hints:
+                    _merge_panel_hints_into_blocks(parsed_json, panel_hints)
+                
                 state["parsed_json_data"] = parsed_json
                 logger.info(f"Successfully parsed JSON response on attempt {attempt}")
                 return state, True
@@ -199,4 +204,82 @@ async def step_validate_drawing_metadata(
         )
     
     return state
+
+
+def _merge_panel_hints_into_blocks(parsed_json: Dict[str, Any], panel_hints: List[Dict[str, Any]]) -> None:
+    """
+    Merge panel row hints into parsed JSON blocks structure.
+    
+    Adds missing panel blocks with circuit rows that have panel_id assigned,
+    ensuring every circuit row retains its panel membership.
+    
+    Args:
+        parsed_json: Parsed JSON structure (mutated in place)
+        panel_hints: List of page hint dictionaries with panels and rows
+    """
+    if not isinstance(parsed_json, dict) or not panel_hints:
+        return
+    
+    blocks = parsed_json.setdefault("blocks", [])
+    if not isinstance(blocks, list):
+        blocks = []
+        parsed_json["blocks"] = blocks
+
+    seen_panels = set()
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        if (block.get("type") or "").lower() != "panel":
+            continue
+        for row in block.get("rows", []):
+            if not isinstance(row, dict):
+                continue
+            pid = row.get("panel") or row.get("panel_name") or row.get("panel_id")
+            if pid:
+                seen_panels.add(str(pid).upper())
+
+    for page_hint in panel_hints:
+        page_no = page_hint.get("page")
+        for panel in page_hint.get("panels", []):
+            panel_id = panel.get("panel_id")
+            rows = panel.get("rows")
+            if not panel_id or not rows:
+                continue
+            key = str(panel_id).upper()
+            if key in seen_panels:
+                continue
+
+            rendered_rows: List[Dict[str, Any]] = []
+            for row in rows:
+                text = row.get("text")
+                ckt = row.get("ckt")
+                entry: Dict[str, Any] = {
+                    "panel": panel_id,
+                    "panel_name": panel_id,
+                    "panel_id": panel_id,
+                    "circuit": ckt,
+                    "circuit_number": ckt,
+                    "description": text,
+                    "raw_text": text,
+                    "source": "panel_hint",
+                }
+                if row.get("bbox"):
+                    entry["bbox"] = row["bbox"]
+                if row.get("bbox_norm"):
+                    entry["bbox_norm"] = row["bbox_norm"]
+                rendered_rows.append(entry)
+
+            if not rendered_rows:
+                continue
+
+            blocks.append(
+                {
+                    "type": "panel",
+                    "name": panel_id,
+                    "page": page_no,
+                    "rows": rendered_rows,
+                    "source": "panel_hint",
+                }
+            )
+            seen_panels.add(key)
 
