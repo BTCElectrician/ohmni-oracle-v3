@@ -85,6 +85,7 @@ def iter_template_docs(
                 raw.get("revision_date") or meta_obj.get("date") or base_meta.get("revision_date")
             )
             for room in rooms_list:
+                room_name = room.get("room_name", "")
                 room_id = room.get("room_id") or room.get("room_number") or path.stem
                 if not agg_sheet_number or not room_id:
                     print(f"Skipping room in {path}: Missing sheet_number or room_id.", file=sys.stderr)
@@ -94,7 +95,7 @@ def iter_template_docs(
                     continue
 
                 tenant_id = room.get("tenant_id") or raw.get("tenant_id") or base_meta.get("tenant_id") or "ohmni"
-                project = room.get("project_name") or project_top
+                project = room.get("project_name") or project_top or project_id_top
                 project_id = room.get("project_id") or project_id_top
                 template_type = room.get("template_type") or template_type_agg
                 summary = build_template_summary(template_type, room)
@@ -114,7 +115,7 @@ def iter_template_docs(
                     "project_id": project_id,
                     "sheet_number": agg_sheet_number,
                     "room_id": room_id,
-                    "room_name": room.get("room_name", ""),
+                    "room_name": room_name,
                     "discipline": room.get("discipline") or ("electrical" if template_type == "electrical" else "architectural"),
                     "levels": levels,
                     "revision": room.get("revision") or revision_top,
@@ -203,7 +204,7 @@ def iter_template_docs(
                 doc["source_template_json_path"] = str(path)[:512]
 
                 # Enhance content summary to include salient fields for vector search
-                summary_parts = [summary]
+                summary_parts = [room_name or room_id, summary]
                 if doc.get("square_footage"):
                     summary_parts.append(f"sf {doc['square_footage']}")
                 if doc.get("ceiling_type"):
@@ -244,11 +245,12 @@ def iter_template_docs(
             or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         )
 
+        room_name = raw.get("room_name", "")
         project = (
             raw.get("project_name")
             or raw.get("project")
             or base_meta.get("project")
-            or "Unnamed Project"
+            or project_id
         )
         project_id = raw.get("project_id") or base_meta.get("project_id") or PROJECT_ID_DEFAULT
         tenant_id = raw.get("tenant_id") or base_meta.get("tenant_id") or "ohmni"
@@ -261,7 +263,7 @@ def iter_template_docs(
             "project_id": project_id,
             "sheet_number": sheet_number,
             "room_id": room_id,
-            "room_name": raw.get("room_name", ""),
+            "room_name": room_name,
             "discipline": raw.get("discipline") or ("electrical" if template_type == "electrical" else "architectural"),
             "levels": raw.get("levels") or base_meta.get("levels") or [],
             "revision": revision,
@@ -352,7 +354,7 @@ def iter_template_docs(
         doc["source_template_json_path"] = str(path)[:512]
 
         # Enhance content summary to include new fields for better vector search
-        summary_parts = [summary]
+        summary_parts = [room_name or room_id, summary]
         if doc.get("square_footage"):
             summary_parts.append(f"sf {doc['square_footage']}")
         if doc.get("ceiling_type"):
@@ -420,4 +422,3 @@ def _collect_sheet_templates(
             )
         )
     return results
-
